@@ -1,0 +1,93 @@
+.product_grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 36px 24px;
+}
+.product_card { min-width: 0; }
+.product_photo {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  background: #ece9e2;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.product_photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  display: block;
+  transition: transform 0.5s ease;
+}
+.product_photo_link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+.product_info h3 a {
+  color: inherit;
+  text-decoration: none;
+}
+.product_info h3 a:hover {
+  color: #8a6d1a;
+}
+.product_card:hover .product_photo img { transform: scale(1.05); }
+.no_photo { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: #5c5c5c; }
+.badge {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  padding: 5px 10px;
+  background: #d4af37;
+  color: #111;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.wish_btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  color: #111;
+  font-size: 18px;
+  cursor: pointer;
+}
+.wish_btn:hover { color: #b89535; }
+.product_info { padding-top: 16px; }
+.product_cat { font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: #5c5c5c; }
+.product_info h3 {
+  margin: 2px 0 6px;
+  font-family: "Bodoni Moda", Georgia, serif;
+  font-weight: 400;
+  font-size: 20px;
+  text-transform: capitalize;
+}
+.product_price { margin: 0; font-weight: 600; }
+.old_price {
+  margin-left: 8px;
+  font-weight: 400;
+  font-size: 14px;
+  color: #8a8a8a;
+  text-decoration: line-through;
+}
+
+@media (max-width: 992px) {
+  .product_grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 768px) {
+  .product_grid { gap: 24px 14px; }
+  .product_info h3 { font-size: 16px; }
+}

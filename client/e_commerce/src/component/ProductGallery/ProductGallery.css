@@ -1,0 +1,120 @@
+.gallery {
+  --gallery-fit: contain;     /* contain = whole photo visible, true proportions
+                                 cover   = fill the frame and crop the edges   */
+  --gallery-bg: #ece9e2;
+  --gold: #d4af37;
+
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+}
+.gallery:not(:has(.gallery_thumbs)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* ---------- thumbnails (left column) ---------- */
+.gallery_thumbs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gallery .gallery_thumb {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  border: 1px solid #d6d6d6;
+  border-radius: 0;
+  background: var(--gallery-bg);
+  overflow: hidden;
+  cursor: pointer;
+  opacity: 0.65;
+  transition: opacity 0.2s, border-color 0.2s;
+}
+.gallery .gallery_thumb:hover { opacity: 1; border-color: #111; }
+.gallery .gallery_thumb:focus-visible { outline: 2px solid #111; outline-offset: 2px; }
+.gallery .gallery_thumb.is_active { opacity: 1; border: 2px solid var(--gold); }
+
+.gallery .gallery_thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: var(--gallery-fit);
+  object-position: center;
+  display: block;
+}
+
+/* ---------- main photo ---------- */
+.gallery .gallery_main {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  background: var(--gallery-bg);
+  overflow: hidden;
+  border-radius: 0;
+}
+.gallery .gallery_main img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: var(--gallery-fit);
+  object-position: center;
+  display: block;
+  transition: transform 0.18s ease-out;
+}
+
+/* small label: Front / Back / Left / Right */
+.gallery_tag {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  padding: 5px 10px;
+  background: rgba(17, 17, 17, 0.78);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+/* hover zoom (mouse devices only) */
+@media (hover: hover) and (pointer: fine) {
+  .gallery .gallery_main { cursor: zoom-in; }
+  .gallery .gallery_main.is_zoom img { transform: scale(1.8); }
+}
+
+.gallery_empty {
+  aspect-ratio: 4 / 5;
+  display: grid;
+  place-items: center;
+  background: #ece9e2;
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #5c5c5c;
+}
+
+/* ---------- phones: thumbnails go under the photo ---------- */
+@media (max-width: 640px) {
+  .gallery { grid-template-columns: minmax(0, 1fr); }
+  .gallery_main { order: 1; }
+  .gallery_thumbs {
+    order: 2;
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .gallery .gallery_thumb {
+    flex: 0 0 64px;
+    width: 64px;
+    height: 64px;
+  }
+}

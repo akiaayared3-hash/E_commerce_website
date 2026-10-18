@@ -1,0 +1,181 @@
+.pdisp {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 56px;
+  align-items: start;
+  margin-top: 24px;
+  color: #111;
+}
+
+/* photo / gallery */
+.pdisp_gallery {
+  position: sticky;
+  top: 90px; /* adjust to your navbar height */
+  min-width: 0;
+}
+.pdisp_badge {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 2;
+  padding: 6px 12px;
+  background: #d4af37;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+/* with thumbnails, move the badge past the thumbnail column onto the main photo */
+.pdisp_gallery:has(.gallery_thumbs) .pdisp_badge { left: 100px; }
+
+/* keep gallery photos in their true proportions, whatever global img rules exist */
+.pdisp .pdisp_gallery .gallery_main img,
+.pdisp .pdisp_gallery .gallery_thumb img {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+}
+
+/* info */
+.pdisp_cat {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #8a6d1a;
+}
+.pdisp_info h1 {
+  margin: 10px 0 16px;
+  font-family: "Bodoni Moda", Georgia, serif;
+  font-weight: 400;
+  font-size: clamp(30px, 3.6vw, 46px);
+  line-height: 1.1;
+  text-transform: capitalize;
+}
+.pdisp_price { margin: 0 0 20px; font-size: 26px; font-weight: 600; }
+.pdisp_old {
+  margin-left: 12px;
+  font-size: 16px;
+  font-weight: 400;
+  color: #8a8a8a;
+  text-decoration: line-through;
+}
+.pdisp_desc { margin: 0 0 28px; font-size: 17px; line-height: 1.7; color: #5c5c5c; }
+
+.pdisp_block { margin-bottom: 24px; }
+.pdisp_label {
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.pdisp_label strong { color: #8a6d1a; }
+
+/* sizes */
+.pdisp_sizes { display: flex; flex-wrap: wrap; gap: 10px; }
+.pdisp_size {
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid #d6d6d6;
+  border-radius: 2px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+.pdisp_size:hover { border-color: #111; }
+.pdisp_size.active { background: #111; border-color: #111; color: #fff; }
+.pdisp_error { margin: 10px 0 0; font-size: 14px; color: #b3261e; }
+
+/* quantity */
+.pdisp_qty {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d6d6d6;
+}
+.pdisp_qty button {
+  width: 48px;
+  height: 48px;
+  border: none;
+  background: #fff;
+  font-size: 20px;
+  cursor: pointer;
+}
+.pdisp_qty button:hover:not(:disabled) { background: #f4f1e6; }
+.pdisp_qty button:disabled { color: #b5b5b5; cursor: not-allowed; }
+.pdisp_qty span { min-width: 44px; text-align: center; font-weight: 600; }
+
+/* actions */
+.pdisp_actions { display: flex; gap: 12px; margin-bottom: 16px; }
+.pdisp_btn {
+  flex: 1;
+  min-height: 52px;
+  border: none;
+  border-radius: 2px;
+  background: #d4af37;
+  color: #111;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.pdisp_btn:hover { background: #b89535; }
+.pdisp_heart {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #111;
+  border-radius: 2px;
+  background: #fff;
+  color: #111;
+  font-size: 20px;
+  cursor: pointer;
+}
+.pdisp_heart:hover,
+.pdisp_heart.liked { color: #b89535; border-color: #b89535; }
+
+.pdisp_notice {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border: 1px solid #d4af37;
+  background: #faf6e8;
+  font-size: 14px;
+}
+.pdisp_ask {
+  display: inline-block;
+  margin-bottom: 24px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #8a6d1a;
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+}
+.pdisp_notes {
+  margin: 0;
+  padding: 20px 0 0;
+  list-style: none;
+  border-top: 1px solid #e8e8e8;
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+  color: #5c5c5c;
+}
+
+@media (max-width: 768px) {
+  .pdisp { grid-template-columns: 1fr; gap: 28px; }
+  .pdisp_gallery { position: static; }
+}
+
+/* phones: thumbnails sit under the photo, so the badge goes back to the corner */
+@media (max-width: 640px) {
+  .pdisp_gallery:has(.gallery_thumbs) .pdisp_badge { left: 16px; }
+}

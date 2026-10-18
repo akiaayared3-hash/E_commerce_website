@@ -1,0 +1,40 @@
+.crumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  color: #5c5c5c;
+}
+
+/* the "/" between items */
+.crumbs li + li::before {
+  content: "/";
+  margin-right: 8px;
+  color: #b5b5b5;
+}
+
+.crumbs a {
+  color: #5c5c5c;
+  text-decoration: none;
+  text-transform: capitalize;
+  transition: color 0.2s ease;
+}
+.crumbs a:hover {
+  color: #8a6d1a;
+  text-decoration: underline;
+}
+
+/* current page, not a link */
+.crumbs li[aria-current="page"] span {
+  color: #111;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+@media (max-width: 480px) {
+  .crumbs ol { font-size: 13px; }
+}

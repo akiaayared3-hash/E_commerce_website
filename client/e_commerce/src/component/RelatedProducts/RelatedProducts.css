@@ -1,0 +1,28 @@
+.related {
+  margin-top: 72px;
+  padding-top: 40px;
+  border-top: 1px solid #e8e8e8;
+}
+
+.related_title {
+  margin: 0 0 28px;
+  font-family: "Bodoni Moda", Georgia, serif;
+  font-weight: 400;
+  font-size: clamp(24px, 2.6vw, 34px);
+  color: #111;
+}
+
+.related_grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+}
+
+@media (max-width: 1024px) {
+  .related_grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 768px) {
+  .related { margin-top: 48px; }
+  .related_grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+}
