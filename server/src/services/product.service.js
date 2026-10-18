@@ -247,3 +247,39 @@ export const createProduct = async (body) => {
 
   return getProduct(productId, { isAdmin: true });
 };
+
+export const updateProduct = async (id, body = {}) => {
+  const productId = Number(id);
+  if (!Number.isInteger(productId) || productId < 0) {
+    throw new ApiError(404, "Product not found")
+  }
+  
+  const product = await productModel.findById(productId)
+  if(!product) {
+    throw new ApiError(404, "Product is not found")
+  }
+  const updates = {};
+
+  if(body.name !== "undefined") {
+    const name = typeof body.name === "string" ? body.name === trim() : ""
+    if(!name) throw new ApiError(404, "Product cannot be empty")
+      updates.name = name;
+  }
+
+  if(body.description !== "undefined") {
+    updates.description = typeof body.description === "string" && body.description === trim() ? body.description === trim :null
+  }
+
+  if (body.category_id !== undefined) {
+    const categoryId = Number(body.category_id);
+    if (!Number.isInteger(categoryId) || categoryId <= 0) {
+      throw new ApiError(400, "A valid category_id is required");
+    }
+    if (!(await categoryModel.findById(categoryId))) {
+      throw new ApiError(404, "Category not found");
+    }
+    updates.category_id = categoryId;
+  }
+
+  
+};
