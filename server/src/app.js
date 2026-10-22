@@ -1,17 +1,28 @@
 import "dotenv/config";
+import path from "path";
+import { fileURLToPath } from "url";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import { pool } from "./config/db.js";
 import { initialDatabase } from "./config/initDb.js";
 import config from "./config/env.js";
-import chapaRoutes from "./routes/chapaRoutes.js";
 import { errorHandler } from "./middlewares/errorHandler.middleware.js";
 import { ApiError } from "./utils/apiError.util.js";
 // import routes
 import authRoutes from './routes/auth.route.js';
 import categoryRoutes from './routes/category.route.js'
 import  productRoutes from "./routes/product.route.js";
+import cartRoutes from "./routes/cart.route.js"
+import orderRoutes from "./routes/order.route.js"
+import paymentRoutes from "./routes/payment.route.js"
+import deliveryRoutes from "./routes/delivery.route.js";
+import uploadRoutes from "./routes/upload.route.js";
+import userRoutes from "./routes/user.route.js";
+import adminRoutes from "./routes/admin.route.js";
+
+
+
 
 // start server
 const app = express();
@@ -19,11 +30,8 @@ app.use(express.json());
 app.use(cors({ origin: process.env.SITE_URL || true }));
 app.use(helmet());
 
-
-
-// Chapa payment routes
-app.use("/api/chapa", chapaRoutes);
-
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // test local host is serve the request
 app.get("/", (req, resp) => {
@@ -34,13 +42,22 @@ app.get("/", (req, resp) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/category", categoryRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/cart", cartRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/payments", paymentRoutes);
+app.use("/api/delivery", deliveryRoutes);
+app.use("/api/shipping-addresses", deliveryRoutes);
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+app.use("/api/upload", uploadRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.use((req, res, next) => {
   console.log("NO ROUTE:", req.method, req.originalUrl);
   next(new ApiError(404, "Route not found"));
 });
 
-app.use(errorHandler);
+app.use(errorHandler); 
 
 // add port listener
 const startServer = async () => {

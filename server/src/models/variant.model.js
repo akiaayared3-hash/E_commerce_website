@@ -24,3 +24,24 @@ export const insert = async (
   );
   return result.insertId;
 };
+
+export const findByIdWithStock = async (variant_id, db = pool) => {
+  const [rows] = await db.query(
+    `SELECT
+       v.id,
+       v.product_id,
+       v.sku,
+       v.name,
+       v.price,
+       v.is_active,
+       p.is_active AS product_active,
+       COALESCE(i.stock_quantity, 0) AS stock
+     FROM product_variants v
+     JOIN products p ON p.id = v.product_id
+     LEFT JOIN inventory i ON i.product_variant_id = v.id
+     WHERE v.id = ?`,
+    [variant_id],
+  );
+
+  return rows[0] ?? null;
+};

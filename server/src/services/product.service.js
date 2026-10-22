@@ -5,6 +5,7 @@ import * as productModel from "../models/product.model.js";
 import * as variantModel from "../models/variant.model.js";
 import * as inventoryModel from "../models/inventory.mode.js"; // fixed: was inventory.mode.js
 import * as categoryModel from "../models/category.model.js";
+import { trim } from "zod";
 
 /* ---------- read side ---------- */
 
@@ -250,7 +251,7 @@ export const createProduct = async (body) => {
 
 export const updateProduct = async (id, body = {}) => {
   const productId = Number(id);
-  if (!Number.isInteger(productId) || productId < 0) {
+  if (!Number.isInteger(productId) || productId <= 0) {
     throw new ApiError(404, "Product not found")
   }
   
@@ -260,10 +261,10 @@ export const updateProduct = async (id, body = {}) => {
   }
   const updates = {};
 
-  if(body.name !== "undefined") {
-    const name = typeof body.name === "string" ? body.name === trim() : ""
-    if(!name) throw new ApiError(404, "Product cannot be empty")
-      updates.name = name;
+  if (body.name !== undefined) {
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name) throw new ApiError(400, "Product name cannot be empty");
+    updates.name = name;
   }
 
   if(body.description !== "undefined") {
@@ -280,6 +281,50 @@ export const updateProduct = async (id, body = {}) => {
     }
     updates.category_id = categoryId;
   }
+  
+  if(body.slug === "undefined") {
+    if(typeof body.slug !== "string" || !body.slug === trim()) {
+      throw new ApiError (404, "Slug name cannot be empty")
+    }
+    const slug = slugify(body.slug)
+    const owner = await productModel.findBySlug(slug)
 
+     if (owner && owner.id !== productId) {
+      throw new ApiError(404, "Slug already exist")
+     }
+     updates.slug = slug
+
+  }
+
+  if(Object.keys(updates).length === 0) {
+   throw new ApiError(404, "Nothing updates")
+  }
+  try {
+    await productModel.update(productId, updates)
+
+  } catch (error) {
+     if(error.cod === "ER-DUM-ENTRY") {
+      throw new ApiError(409, "Slug already exists")
+     }
+     throw error
+  }
+  return getProduct(productId, {isAdmin: true});
   
 };
+
+export const setProductStatus = async (id, is_active) => {
+  const productId = Number(id);
+
+  if(!Number.productModel(productId) || productId <= 0) {
+     throw new ApiError(404, "Invalid product id")
+  }
+  if (typeof is_active !== "boolean") {
+    throw new ApiError(404, "is_active must be true or false")
+  }
+  const product = await productModel.findById(productId);
+  if(!product) {
+    throw new ApiError(404, "product not found")
+  }
+  await productModel.setStatus(productId, is_active)
+  return (productId, {is_admin: true})
+}

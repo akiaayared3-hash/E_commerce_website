@@ -4,7 +4,10 @@ import {
   getProductBySlug,
   getAllProducts,
   createProduct,
+  updateProduct,
+  setProductStatus
 } from "../services/product.service.js";
+import { success } from "zod";
 
 // Public routes have no `protect`, so req.user can be missing.
 const isAdminRequest = (req) => req.user?.role === "admin";
@@ -35,3 +38,32 @@ export const create = asyncHandler(async (req, res) => {
   const product = await createProduct(req.body);
   res.status(201).json({ success: true, product });
 });
+
+export const update = asyncHandler(async(req,resp) => {
+   const product = await updateProduct(req.params.id, req.body) 
+  resp.status(200).json({
+    success: true,
+    message: "Update successfully",
+    product
+  })
+   
+})
+
+export const updateStatus = asyncHandler(async(req, resp) => {
+  const product = await setProductStatus(req.params.id, req.body?.is_active) 
+  resp.status(200).json({
+    success: true,
+    product
+  })
+})
+
+export const remove = asyncHandler(async(req,resp) => {
+  const product = await setProductStatus(req.params.id, false) 
+  
+  resp.status(200).json({
+    success: true,
+    message: 'Product delete successfully',
+    product
+  })
+  
+})
