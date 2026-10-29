@@ -432,7 +432,11 @@ const createOrderTx = (userId, paymentMethod, resolveAddress) =>
   });
 
 const useSavedAddress = (userId, addressId) => async (conn) => {
-  const address = await addressModel.findByIdForUpdateAndUser(addressId, userId, conn);
+  const address = await addressModel.findByIdForUpdateAndUser(
+    addressId,
+    userId,
+    conn,
+  );
 
   if (!address) {
     throw new ApiError(404, "Shipping address not found");
@@ -689,7 +693,8 @@ export const getMyOrderById = async (userId, orderId) => {
   const uid = parseId(userId, "user id");
   const id = parseId(orderId, "order id");
 
-  const order = await orderModel.findByIdForUpdateAndUser(id, uid);
+  // Plain read (no lock): this runs outside any transaction.
+  const order = await orderModel.findByIdAndUser(id, uid);
 
   if (!order) {
     throw new ApiError(404, "Order not found");
@@ -819,7 +824,8 @@ export const getAllOrders = async ({ status, page, limit } = {}) => {
 export const getOrderByIdAdmin = async (orderId) => {
   const id = parseId(orderId, "order id");
 
-  const order = await orderModel.findByIdForUpdate(id);
+  // Plain read (no lock): this runs outside any transaction.
+  const order = await orderModel.findById(id);
 
   if (!order) {
     throw new ApiError(404, "Order not found");

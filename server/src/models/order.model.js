@@ -75,6 +75,17 @@ export const insert = async (
   return result.insertId;
 };
 
+// Plain read, no lock. Use outside transactions (e.g. admin detail view).
+export const findById = async (order_id, db = pool) => {
+  const [rows] = await db.query(
+    `SELECT ${ORDER_COLUMNS}
+     FROM orders
+     WHERE id = ?`,
+    [order_id],
+  );
+
+  return rows[0] ?? null;
+};
 
 export const findByIdForUpdate = async (order_id, db = pool) => {
   const [rows] = await db.query(
@@ -88,11 +99,26 @@ export const findByIdForUpdate = async (order_id, db = pool) => {
   return rows[0] ?? null;
 };
 
-
 // Ownership is checked in SQL: returns null if the order is not this user's.
 export const findByIdAndUser = async (order_id, user_id, db = pool) => {
   const [rows] = await db.query(
     `SELECT ${ORDER_COLUMNS} FROM orders WHERE id = ? AND user_id = ?`,
+    [order_id, user_id],
+  );
+  return rows[0] ?? null;
+};
+
+// Same ownership check, but locks the row. Use inside a transaction.
+export const findByIdForUpdateAndUser = async (
+  order_id,
+  user_id,
+  db = pool,
+) => {
+  const [rows] = await db.query(
+    `SELECT ${ORDER_COLUMNS}
+     FROM orders
+     WHERE id = ? AND user_id = ?
+     FOR UPDATE`,
     [order_id, user_id],
   );
   return rows[0] ?? null;

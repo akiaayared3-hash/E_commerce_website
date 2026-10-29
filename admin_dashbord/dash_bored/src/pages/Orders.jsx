@@ -316,7 +316,7 @@ const normalize = (order) => {
       order.createdAt ??
       null,
     total: total !== null && total >= 0 ? total : null,
-    currency: order.currency ?? "USD",
+    currency: order.currency ?? "ETB",
     status: rawStatus || "unknown",
     paymentStatus: String(order.payment_status ?? payment.status ?? "")
       .trim()
@@ -358,7 +358,7 @@ const label = (value) => {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 };
 
-const money = (value, currency = "USD") => {
+const money = (value, currency = "ETB") => {
   if (
     value === null ||
     value === undefined ||
@@ -1310,7 +1310,7 @@ export default function Orders() {
           <div>
             <p>Order value on this page</p>
             <strong>
-              {money(summary.value, visible[0]?.currency ?? "USD")}
+              {money(summary.value, visible[0]?.currency ?? "ETB")}
             </strong>
           </div>
         </div>
