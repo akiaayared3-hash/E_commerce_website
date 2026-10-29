@@ -3,40 +3,39 @@ import * as userModel from "../models/user.model.js";
 import { ApiError } from "../utils/apiError.util.js";
 
 /**
- * Get current logged-in user profile
+ * Get current logged-in user profile.
  */
 export const getMe = async (userId) => {
-  const user = await userModel.findById(userId);
-  if (!user) throw new ApiError(404, "User not found");
+  const user = await userModel.findUserById(userId);
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
   return user;
 };
 
 /**
- * Update profile (name, phone)
+ * Update profile (name, phone).
  */
 export const updateMe = async (userId, payload) => {
   const { first_name, last_name, phone_number } = payload;
 
-  if (phone_number) {
-    const existing = await userModel.findByPhone(phone_number);
-    if (existing && existing.id !== userId) {
-      throw new ApiError(409, "Phone number already in use");
-    }
-  }
-
-  const updated = await userModel.updateProfile(userId, {
+  const updated = await userModel.updateUser(userId, {
     first_name,
     last_name,
     phone_number,
   });
 
-  if (!updated) throw new ApiError(400, "Nothing to update");
+  if (!updated) {
+    throw new ApiError(400, "Nothing to update");
+  }
 
-  return userModel.findById(userId);
+  return getMe(userId);
 };
 
 /**
- * Change password (while logged in)
+ * Change password while logged in.
  */
 export const changePassword = async (
   userId,
@@ -50,11 +49,25 @@ export const changePassword = async (
     throw new ApiError(400, "New password must be at least 6 characters");
   }
 
-  const user = await userModel.findByEmail(
-    (await userModel.findById(userId)).email,
+  const user = await userModel.findUserById(userId);
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  // The safe-by-default ID lookup omits password_hash.
+  // Fetch the login record by email to verify the current password.
+  const userWithPassword = await userModel.findUserByEmail(user.email);
+
+  if (!userWithPassword?.password_hash) {
+    throw new ApiError(500, "Unable to verify the current password");
+  }
+
+  const isMatch = await bcrypt.compare(
+    currentPassword,
+    userWithPassword.password_hash,
   );
 
-  const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
   if (!isMatch) {
     throw new ApiError(401, "Current password is incorrect");
   }
@@ -66,23 +79,18 @@ export const changePassword = async (
 };
 
 /**
- * Admin: list users
+ * Admin user listing is not supported by the provided user.model.js yet.
  */
-export const listUsers = async ({ role, limit, offset }) => {
-  const [items, total] = await Promise.all([
-    userModel.listUsers({ role, limit, offset }),
-    userModel.countUsers({ role }),
-  ]);
-  return { items, total, limit, offset };
+export const listUsers = async () => {
+  throw new ApiError(501, "User listing is not implemented in the user model");
 };
 
 /**
- * Admin: activate / deactivate user
+ * Admin status updates are not supported by the provided user.model.js yet.
  */
-export const setUserStatus = async (targetUserId, is_active) => {
-  const user = await userModel.findById(targetUserId);
-  if (!user) throw new ApiError(404, "User not found");
-
-  await userModel.setActiveStatus(targetUserId, is_active);
-  return userModel.findById(targetUserId);
+export const setUserStatus = async () => {
+  throw new ApiError(
+    501,
+    "User status management is not implemented in the user model",
+  );
 };

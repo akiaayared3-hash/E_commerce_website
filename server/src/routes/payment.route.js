@@ -1,27 +1,28 @@
-import { Router } from "express";
+// routes/payment.routes.js
 import express from "express";
+import { Router } from "express";
 import * as paymentController from "../controllers/payment.controller.js";
-// import { protect, restrictTo } from "../middlewares/auth.middleware.js"; // if you have auth
+import { protect, restrictTo } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
-// ---------- Public / Frontend ----------
 
-// Initialize payment (usually called by Order service, but exposed if needed)
-router.post("/initialize", paymentController.initialize);
 
-// Check status after user returns from gateway
-router.get("/status/:tx_ref", paymentController.getStatus);
-
-// ---------- Webhook (MUST use raw body) ----------
 router.post(
-  "/webhooks/chapa",
-  express.raw({ type: "application/json" }), // critical
-  paymentController.chapaWebhook,
+  "/initialize",
+  protect, // require logged-in user
+  paymentController.initialize,
 );
 
-// ---------- Admin ----------
-// router.get("/admin", protect, restrictTo("admin"), paymentController.adminList);
-router.get("/admin", paymentController.adminList); // remove auth for now if testing
+router.get("/status/:tx_ref", protect, paymentController.getStatus);
+
+
+router.get("/admin", protect, restrictTo("admin"), paymentController.adminList);
+
+router.post(
+  "/webhook",
+  express.raw({ type: "application/json" }),
+  paymentController.chapaWebhook,
+);
 
 export default router;

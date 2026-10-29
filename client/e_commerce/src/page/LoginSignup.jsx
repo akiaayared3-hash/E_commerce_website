@@ -1,15 +1,23 @@
-import React, { useState } from "react";
-import { NavLink } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import {
+  NavLink,
+  Navigate,
+  useNavigate,
+  useSearchParams,
+} from "react-router-dom";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
 import { categories as products } from "../component/Assets/product.js";
+import { apiRequest } from "../lib/api.js";
+import { useAuth } from "../context/AuthContext.jsx";
 import "./css/LoginSignUp.css";
 
 const PANEL_ID = 5; // product photo shown on the left panel
 
 const emptyForm = {
-  name: "",
+  first_name: "",
+  last_name: "",
   email: "",
-  phone: "",
+  phone_number: "",
   password: "",
   confirm: "",
   remember: false,
@@ -18,10 +26,15 @@ const emptyForm = {
 
 const validate = (mode, v) => {
   const e = {};
-  if (mode === "signup" && v.name.trim().length < 2)
-    e.name = "Enter your full name.";
-  if (!/^\S+@\S+\.\S+$/.test(v.email.trim()))
+  if (mode === "signup") {
+    if (v.first_name.trim().length < 2) e.first_name = "Enter your first name.";
+    if (v.last_name.trim().length < 2) e.last_name = "Enter your last name.";
+    if (!/^\+?[0-9\s-]{9,15}$/.test(v.phone_number.trim()))
+      e.phone_number = "Enter a valid phone number.";
+  }
+  if (!/^\S+@\S+\.\S+$/.test(v.email.trim())) {
     e.email = "Enter a valid email address.";
+  }
   if (v.password.length < 8) e.password = "Use at least 8 characters.";
   if (mode === "signup") {
     if (v.confirm !== v.password) e.confirm = "Passwords do not match.";
@@ -44,42 +57,98 @@ const Field = ({ id, label, error, children }) => (
 );
 
 const LoginSignup = () => {
-  const [mode, setMode] = useState("login"); // "login" | "signup"
+  const [searchParams] = useSearchParams();
+  const [mode, setMode] = useState(
+    searchParams.get("mode") === "signup" ? "signup" : "login",
+  );
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState({});
   const [showPass, setShowPass] = useState(false);
   const [status, setStatus] = useState("idle"); // idle | loading | done
 
+  const { user, login } = useAuth();
+  const navigate = useNavigate();
   const panel = products.find((p) => p.id === PANEL_ID);
   const isSignup = mode === "signup";
+
+  // lets "Create an account" in the account menu open the signup tab
+  useEffect(() => {
+    setMode(searchParams.get("mode") === "signup" ? "signup" : "login");
+  }, [searchParams]);
+
+  // after success, go to the shop (timer is cleaned up if the page closes)
+  useEffect(() => {
+    if (status !== "done") return;
+    const t = setTimeout(() => navigate("/", { replace: true }), 1200);
+    return () => clearTimeout(t);
+  }, [status, navigate]);
 
   const switchMode = (next) => {
     setMode(next);
     setErrors({});
     setStatus("idle");
     setShowPass(false);
-    setForm({ ...emptyForm, email: form.email });
+    setForm((prev) => ({ ...emptyForm, email: prev.email }));
   };
 
   const onChange = (e) => {
     const { name, type, value, checked } = e.target;
-    setForm({ ...form, [name]: type === "checkbox" ? checked : value });
-    if (errors[name]) setErrors({ ...errors, [name]: undefined });
+    setForm((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+    setErrors((prev) => ({ ...prev, [name]: undefined, submit: undefined }));
   };
 
   const onSubmit = async (e) => {
     e.preventDefault();
     const found = validate(mode, form);
     setErrors(found);
-    if (Object.keys(found).length) return;
+    if (Object.keys(found).length > 0) return;
 
     setStatus("loading");
-    // TODO: send to your backend over HTTPS, for example:
-    // await fetch("/api/auth/" + mode, { method: "POST", ... })
-    // Never save the password in localStorage or log it.
-    await new Promise((r) => setTimeout(r, 600));
-    setStatus("done");
+
+    try {
+      const endpoint =
+        mode === "signup" ? "/api/auth/register" : "/api/auth/login";
+
+      const payload =
+        mode === "signup"
+          ? {
+              first_name: form.first_name.trim(),
+              last_name: form.last_name.trim(),
+              email: form.email.trim(),
+              phone_number: form.phone_number.trim(),
+              password: form.password,
+            }
+          : {
+              email: form.email.trim(),
+              password: form.password,
+            };
+
+      const res = await apiRequest(endpoint, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      // works whether the backend returns { user, token } or { data: { user, token } }
+      const data = res?.data ?? res;
+
+      if (!data?.token) {
+        throw new Error("Authentication failed. No token received.");
+      }
+
+      // saves to localStorage AND updates shared state, so the navbar changes instantly
+      login(data.token, data.user);
+      setStatus("done");
+    } catch (error) {
+      setStatus("idle");
+      setErrors({ submit: error.message || "Something went wrong." });
+    }
   };
+
+  // already logged in? keep them off this page (must stay after all hooks)
+  if (user && status !== "done") return <Navigate to="/profile" replace />;
 
   return (
     <main className="auth_page">
@@ -129,13 +198,10 @@ const LoginSignup = () => {
             <div className="auth_success" role="status">
               <strong>
                 {isSignup
-                  ? "Account request received."
-                  : "Login request received."}
+                  ? "Account created successfully!"
+                  : "Login successful!"}
               </strong>
-              <p>
-                This page is ready for your server. Connect the form to your
-                backend to finish the process.
-              </p>
+              <p>You are now logged in. Taking you to the shop...</p>
               <NavLink to="/" className="auth_btn">
                 Continue shopping
               </NavLink>
@@ -143,18 +209,41 @@ const LoginSignup = () => {
           ) : (
             <form onSubmit={onSubmit} noValidate>
               {isSignup && (
-                <Field id="a-name" label="Full name" error={errors.name}>
-                  <input
-                    id="a-name"
-                    name="name"
-                    type="text"
-                    autoComplete="name"
-                    value={form.name}
-                    onChange={onChange}
-                    aria-invalid={!!errors.name}
-                    aria-describedby={errors.name ? "a-name-error" : undefined}
-                  />
-                </Field>
+                <>
+                  <Field
+                    id="a-first"
+                    label="First name"
+                    error={errors.first_name}
+                  >
+                    <input
+                      id="a-first"
+                      name="first_name"
+                      type="text"
+                      autoComplete="given-name"
+                      value={form.first_name}
+                      onChange={onChange}
+                      aria-invalid={!!errors.first_name}
+                      aria-describedby={
+                        errors.first_name ? "a-first-error" : undefined
+                      }
+                    />
+                  </Field>
+
+                  <Field id="a-last" label="Last name" error={errors.last_name}>
+                    <input
+                      id="a-last"
+                      name="last_name"
+                      type="text"
+                      autoComplete="family-name"
+                      value={form.last_name}
+                      onChange={onChange}
+                      aria-invalid={!!errors.last_name}
+                      aria-describedby={
+                        errors.last_name ? "a-last-error" : undefined
+                      }
+                    />
+                  </Field>
+                </>
               )}
 
               <Field id="a-email" label="Email" error={errors.email}>
@@ -171,15 +260,19 @@ const LoginSignup = () => {
               </Field>
 
               {isSignup && (
-                <Field id="a-phone" label="Phone (optional)">
+                <Field id="a-phone" label="Phone" error={errors.phone_number}>
                   <input
                     id="a-phone"
-                    name="phone"
+                    name="phone_number"
                     type="tel"
                     autoComplete="tel"
                     placeholder="+251 9XX XXX XXX"
-                    value={form.phone}
+                    value={form.phone_number}
                     onChange={onChange}
+                    aria-invalid={!!errors.phone_number}
+                    aria-describedby={
+                      errors.phone_number ? "a-phone-error" : undefined
+                    }
                   />
                 </Field>
               )}
@@ -204,7 +297,7 @@ const LoginSignup = () => {
                     type="button"
                     className="auth_eye"
                     aria-label={showPass ? "Hide password" : "Show password"}
-                    onClick={() => setShowPass(!showPass)}
+                    onClick={() => setShowPass((s) => !s)}
                   >
                     {showPass ? <FaEyeSlash /> : <FaEye />}
                   </button>
@@ -276,6 +369,12 @@ const LoginSignup = () => {
                     </span>
                   )}
                 </div>
+              )}
+
+              {errors.submit && (
+                <p className="auth_error" role="alert">
+                  {errors.submit}
+                </p>
               )}
 
               <button

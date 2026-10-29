@@ -1,323 +1,700 @@
-// services/payment.service.js
-import * as paymentModel from "../models/payment.model.js";
-import * as orderModel from "../models/order.model.js";
-import {
-  PAYMENT_GATEWAY,
-  DEFAULT_CURRENCY,
-  generateTxRef,
-  initializePayment,
-  verifyTransaction,
-  verifyWebhookSignature,
-} from "../utils/payments.util.js";
+
+// server/src/models/payment.model.js
+import { pool } from "../config/db.js";
 import { ApiError } from "../utils/apiError.util.js";
-import { withTransaction } from "../utils/transaction.util.js";
 
-// ---------- constants ----------
+/* =========================================================
+   Constants
+========================================================= */
 
-export const PAYMENT_STATUS = {
-  PENDING: "pending",
-  COMPLETED: "completed",
-  FAILED: "failed",
-  CANCELLED: "cancelled", // closed because its order was cancelled
-  EXPIRED: "expired", // closed because its order expired unpaid
-  REFUNDED: "refunded",
-  // Money was received but the order cannot use it (cancelled order,
-  // duplicate payment, amount mismatch). Needs a human or a refund flow.
-  NEEDS_REVIEW: "needs_review",
-};
+const PAYMENT_STATUSES = new Set([
+  "pending",
+  "completed",
+  "failed",
+  "cancelled",
+  "expired",
+  "refunded",
+  "needs_review",
+]);
 
-export const PAYMENT_STATUSES = Object.values(PAYMENT_STATUS);
+const MAX_LIMIT = 100;
+const DEFAULT_LIMIT = 20;
 
-// Local copies on purpose: importing order.service.js here would create a
-// circular import (order.service already imports this file).
-const ORDER_PENDING = "pending";
-const ORDER_PAID = "paid";
-const ORDER_CANCELLED = "cancelled";
-
-// ---------- helpers ----------
-
-const toCents = (value) => Math.round(Number(value) * 100);
-
-const sameMoney = (a, b) => toCents(a) === toCents(b);
-
-const sameCurrency = (a, b) =>
-  String(a ?? "").toUpperCase() === String(b ?? "").toUpperCase();
-
-const parsePaging = ({ limit = 20, offset = 0 } = {}) => ({
-  limit: Math.min(Math.max(Number(limit) || 20, 1), 100),
-  offset: Math.max(Number(offset) || 0, 0),
-});
-
-const flagForReview = async (payment, verification, reason, conn) => {
-  await paymentModel.markNeedsReview(
-    payment.id,
-    {
-      transaction_id: verification.transaction_id ?? null,
-      failure_reason: reason,
-      gateway_response: verification.raw,
-    },
-    conn,
-  );
-  // Replace with your logger / alerting
-  console.warn(
-    `[payment] needs review: payment=${payment.id} order=${payment.order_id} reason=${reason}`,
-  );
-  return { handled: true, reason };
-};
-
-/**
- * The single place where a gateway verification result is applied.
- * Used by BOTH the webhook and the status endpoint, always inside a
- * transaction. Safe to run many times for the same payment.
- */
-const applyVerification = async (tx_ref, verification, conn) => {
-  // 1. Lock the payment row so webhook + status check cannot race
-  const payment = await paymentModel.findByTxRefForUpdate(tx_ref, conn);
-  if (!payment) return { handled: false, reason: "payment_not_found" };
-
-  if (payment.status !== PAYMENT_STATUS.PENDING) {
-    return { handled: true, reason: "already_processed", payment };
-  }
-
-  // 2. The gateway must be answering about the transaction we asked about
-  if (verification.tx_ref && verification.tx_ref !== tx_ref) {
-    throw new ApiError(502, "Gateway returned a different transaction");
-  }
-
-  // 3. Definitive failure: record it. The order stays pending so the
-  //    customer can retry; the expiry job cleans up if they never do.
-  if (verification.status === "failed") {
-    await paymentModel.markFailed(
-      payment.id,
-      {
-        failure_reason: "Gateway reported failed",
-        gateway_response: verification.raw,
-      },
-      conn,
-    );
-    return { handled: true, reason: "failed", payment };
-  }
-
-  if (verification.status !== "success") {
-    return { handled: true, reason: "still_pending", payment };
-  }
-
-  // 4. Money really arrived. Amount and currency must match what we asked for.
-  if (
-    !sameMoney(verification.amount, payment.amount) ||
-    !sameCurrency(verification.currency, payment.currency)
-  ) {
-    return flagForReview(payment, verification, "amount_mismatch", conn);
-  }
-
-  // 5. Lock the order and decide what the money means
-  const order = await orderModel.findByIdForUpdate(payment.order_id, conn);
-  if (!order) {
-    return flagForReview(payment, verification, "order_not_found", conn);
-  }
-
-  if (order.order_status === ORDER_CANCELLED) {
-    return flagForReview(
-      payment,
-      verification,
-      "order_cancelled_before_payment",
-      conn,
-    );
-  }
-
-  if (order.order_status !== ORDER_PENDING) {
-    // Already paid (second payment for the same order) or further along
-    return flagForReview(payment, verification, "duplicate_payment", conn);
-  }
-
-  // 6. Happy path: payment completed + order paid, same transaction
-  const updated = await paymentModel.markCompleted(
-    payment.id,
-    {
-      transaction_id: verification.transaction_id,
-      gateway_response: verification.raw,
-    },
-    conn,
-  );
-  if (!updated) {
-    return { handled: true, reason: "already_processed", payment };
-  }
-
-  const moved = await orderModel.transitionStatus(
-    order.id,
-    ORDER_PENDING,
-    ORDER_PAID,
-    conn,
-  );
-  if (!moved) {
-    // Should not happen under the row lock; roll everything back and retry
-    throw new ApiError(409, "Order status changed during payment");
-  }
-
-  return { handled: true, reason: "completed", payment };
-};
-
-// ---------- start payment ----------
-
-/**
- * Called after the order exists (status = pending) and stock is deducted.
- * The amount is always read from the database, never trusted from the caller.
- */
-export const startPayment = async ({
+const PAYMENT_COLUMNS = `
+  id,
   order_id,
-  amount, // optional sanity check only
-  currency = DEFAULT_CURRENCY,
-  customer, // { email, first_name, last_name, phone_number }
-  callback_url,
-  return_url,
-}) => {
-  const tx_ref = generateTxRef();
+  tx_ref,
+  payment_gateway,
+  transaction_id,
+  amount,
+  currency,
+  status,
+  failure_reason,
+  gateway_response,
+  paid_at,
+  created_at,
+  updated_at
+`;
 
-  // 1. Validate order + create the payment row (short DB transaction,
-  //    no network call while holding locks)
-  const { paymentId, payable } = await withTransaction(async (conn) => {
-    const order = await orderModel.findByIdForUpdate(order_id, conn);
-    if (!order) throw new ApiError(404, "Order not found");
+/* =========================================================
+   Helpers
+========================================================= */
 
-    if (order.order_status !== ORDER_PENDING) {
-      throw new ApiError(
-        409,
-        `Order is "${order.order_status}" and cannot be paid`,
-      );
+const getDb = (db = pool) => db;
+
+const normalizeId = (value, field = "id") => {
+  const id = Number(value);
+
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    throw new ApiError(400, `Invalid ${field}`);
+  }
+
+  return id;
+};
+
+const normalizeTxRef = (value) => {
+  if (typeof value !== "string") {
+    throw new ApiError(400, "Invalid transaction reference");
+  }
+
+  const txRef = value.trim();
+
+  if (!txRef || txRef.length > 100) {
+    throw new ApiError(400, "Invalid transaction reference");
+  }
+
+  return txRef;
+};
+
+const normalizeMoney = (value, field = "amount") => {
+  const amount = Number(value);
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new ApiError(400, `Invalid payment ${field}`);
+  }
+
+  // The database stores DECIMAL(10,2).
+  if (Math.round(amount * 100) / 100 !== amount) {
+    throw new ApiError(400, `Payment ${field} must have at most 2 decimals`);
+  }
+
+  if (amount >= 100000000) {
+    throw new ApiError(400, `Payment ${field} exceeds the allowed range`);
+  }
+
+  return amount.toFixed(2);
+};
+
+const normalizeCurrency = (value = "ETB") => {
+  if (typeof value !== "string") {
+    throw new ApiError(400, "Invalid payment currency");
+  }
+
+  const currency = value.trim().toUpperCase();
+
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new ApiError(400, "Currency must be a 3-letter code");
+  }
+
+  return currency;
+};
+
+const normalizeGateway = (value) => {
+  if (typeof value !== "string") {
+    throw new ApiError(400, "Invalid payment gateway");
+  }
+
+  const gateway = value.trim().toLowerCase();
+
+  if (!gateway || gateway.length > 50) {
+    throw new ApiError(400, "Invalid payment gateway");
+  }
+
+  return gateway;
+};
+
+const normalizeLimit = (value = DEFAULT_LIMIT) => {
+  const limit = Number(value);
+
+  if (!Number.isSafeInteger(limit) || limit < 1) {
+    return DEFAULT_LIMIT;
+  }
+
+  return Math.min(limit, MAX_LIMIT);
+};
+
+const normalizeOffset = (value = 0) => {
+  const offset = Number(value);
+
+  if (!Number.isSafeInteger(offset) || offset < 0) {
+    return 0;
+  }
+
+  return offset;
+};
+
+/**
+ * Serialize gateway responses before storing them as JSON.
+ * Avoid passing undefined or unserializable values to MySQL.
+ */
+const normalizeGatewayResponse = (value) => {
+  if (value == null) return null;
+
+  try {
+    const json = JSON.stringify(value);
+
+    if (json === undefined) {
+      throw new Error("Gateway response is not serializable");
     }
 
-    if (amount != null && !sameMoney(amount, order.total_amount)) {
-      throw new ApiError(400, "Amount does not match the order total");
-    }
+    return json;
+  } catch {
+    throw new ApiError(400, "Invalid gateway response");
+  }
+};
 
-    const alreadyPaid = await paymentModel.findCompletedByOrder(order_id, conn);
-    if (alreadyPaid) {
-      throw new ApiError(409, "This order has already been paid");
-    }
+const affectedRows = (result) => Number(result?.affectedRows ?? 0);
 
-    const id = await paymentModel.insert(
-      {
+/**
+ * Only permit the explicit database connection supplied by a service
+ * transaction, otherwise use the application connection pool.
+ */
+const queryRows = async (sql, params = [], db = pool) => {
+  const [rows] = await getDb(db).query(sql, params);
+  return rows;
+};
+
+/* =========================================================
+   Create payment
+========================================================= */
+
+/**
+ * Creates a pending payment.
+ *
+ * Pass a transaction connection when this operation must participate
+ * in an existing transaction.
+ *
+ * Returns the inserted payment ID.
+ */
+export const insert = async (
+  {
+    order_id,
+    tx_ref,
+    payment_gateway,
+    amount,
+    currency = "ETB",
+  },
+  db = pool,
+) => {
+  const orderId = normalizeId(order_id, "order ID");
+  const transactionRef = normalizeTxRef(tx_ref);
+  const gateway = normalizeGateway(payment_gateway);
+  const paymentAmount = normalizeMoney(amount);
+  const paymentCurrency = normalizeCurrency(currency);
+
+  const [result] = await getDb(db).execute(
+    `
+      INSERT INTO payments (
         order_id,
         tx_ref,
-        payment_gateway: PAYMENT_GATEWAY,
-        amount: order.total_amount,
+        payment_gateway,
+        amount,
         currency,
-      },
-      conn,
-    );
+        status
+      )
+      VALUES (?, ?, ?, ?, ?, 'pending')
+    `,
+    [
+      orderId,
+      transactionRef,
+      gateway,
+      paymentAmount,
+      paymentCurrency,
+    ],
+  );
 
-    return { paymentId: id, payable: order.total_amount };
-  });
-
-  // 2. Call the gateway outside the transaction
-  try {
-    const { checkout_url } = await initializePayment({
-      tx_ref,
-      amount: payable,
-      currency,
-      customer,
-      callback_url,
-      return_url,
-    });
-
-    return { payment_id: paymentId, tx_ref, checkout_url };
-  } catch (err) {
-    // Do not leave an orphan pending payment behind
-    try {
-      await paymentModel.markFailed(paymentId, {
-        failure_reason: "Gateway initialization failed",
-        gateway_response: { message: err.message },
-      });
-    } catch (cleanupErr) {
-      console.error(
-        `[payment] could not mark payment ${paymentId} failed:`,
-        cleanupErr,
-      );
-    }
-    throw err;
-  }
+  return result.insertId;
 };
 
-// ---------- webhook ----------
+/* =========================================================
+   Find payment
+========================================================= */
+
+export const findById = async (id, db = pool) => {
+  const paymentId = normalizeId(id, "payment ID");
+
+  const rows = await queryRows(
+    `
+      SELECT ${PAYMENT_COLUMNS}
+      FROM payments
+      WHERE id = ?
+      LIMIT 1
+    `,
+    [paymentId],
+    db,
+  );
+
+  return rows[0] ?? null;
+};
+
+export const findByTxRef = async (tx_ref, db = pool) => {
+  const transactionRef = normalizeTxRef(tx_ref);
+
+  const rows = await queryRows(
+    `
+      SELECT ${PAYMENT_COLUMNS}
+      FROM payments
+      WHERE tx_ref = ?
+      LIMIT 1
+    `,
+    [transactionRef],
+    db,
+  );
+
+  return rows[0] ?? null;
+};
 
 /**
- * Must be called with the RAW body (express.raw on the webhook route,
- * mounted before express.json).
+ * Must be called inside a transaction when row locking is required.
  */
-export const handleWebhook = async (rawBody, headers) => {
-  if (!verifyWebhookSignature(rawBody, headers)) {
-    throw new ApiError(401, "Invalid webhook signature");
+export const findByTxRefForUpdate = async (tx_ref, db) => {
+  if (!db || typeof db.execute !== "function") {
+    throw new Error(
+      "findByTxRefForUpdate requires a transaction connection",
+    );
   }
 
-  let event;
-  try {
-    event = JSON.parse(rawBody.toString());
-  } catch {
-    throw new ApiError(400, "Invalid webhook payload");
+  const transactionRef = normalizeTxRef(tx_ref);
+
+  const rows = await queryRows(
+    `
+      SELECT ${PAYMENT_COLUMNS}
+      FROM payments
+      WHERE tx_ref = ?
+      LIMIT 1
+      FOR UPDATE
+    `,
+    [transactionRef],
+    db,
+  );
+
+  return rows[0] ?? null;
+};
+
+export const findByIdForUpdate = async (id, db) => {
+  if (!db || typeof db.execute !== "function") {
+    throw new Error("findByIdForUpdate requires a transaction connection");
   }
 
-  const tx_ref = event?.tx_ref || event?.data?.tx_ref;
-  if (!tx_ref) throw new ApiError(400, "Missing tx_ref in webhook");
+  const paymentId = normalizeId(id, "payment ID");
 
-  // Never trust the webhook body: ask the gateway directly.
-  // Done before the DB transaction so no lock is held during the HTTP call.
-  const verification = await verifyTransaction(tx_ref);
+  const rows = await queryRows(
+    `
+      SELECT ${PAYMENT_COLUMNS}
+      FROM payments
+      WHERE id = ?
+      LIMIT 1
+      FOR UPDATE
+    `,
+    [paymentId],
+    db,
+  );
 
-  return withTransaction((conn) =>
-    applyVerification(tx_ref, verification, conn),
+  return rows[0] ?? null;
+};
+
+/* =========================================================
+   Order payment lookups
+========================================================= */
+
+/**
+ * The generated unique completed_order_id column in your schema
+ * prevents more than one completed payment per order.
+ */
+export const findCompletedByOrder = async (order_id, db = pool) => {
+  const orderId = normalizeId(order_id, "order ID");
+
+  const rows = await queryRows(
+    `
+      SELECT ${PAYMENT_COLUMNS}
+      FROM payments
+      WHERE order_id = ?
+        AND status = 'completed'
+      ORDER BY paid_at DESC, id DESC
+      LIMIT 1
+    `,
+    [orderId],
+    db,
+  );
+
+  return rows[0] ?? null;
+};
+
+export const findByOrder = async (
+  order_id,
+  { status = null, limit = DEFAULT_LIMIT, offset = 0 } = {},
+  db = pool,
+) => {
+  const orderId = normalizeId(order_id, "order ID");
+  const safeLimit = normalizeLimit(limit);
+  const safeOffset = normalizeOffset(offset);
+
+  const conditions = ["order_id = ?"];
+  const params = [orderId];
+
+  if (status != null) {
+    if (!PAYMENT_STATUSES.has(status)) {
+      throw new ApiError(400, "Invalid payment status");
+    }
+
+    conditions.push("status = ?");
+    params.push(status);
+  }
+
+  params.push(safeLimit, safeOffset);
+
+  return queryRows(
+    `
+      SELECT ${PAYMENT_COLUMNS}
+      FROM payments
+      WHERE ${conditions.join(" AND ")}
+      ORDER BY created_at DESC, id DESC
+      LIMIT ? OFFSET ?
+    `,
+    params,
+    db,
   );
 };
 
-// ---------- status check ----------
+/* =========================================================
+   Internal status update
+========================================================= */
 
-/**
- * Customer / frontend check after returning from the payment page.
- * Pass userId for customers (ownership enforced); omit it for admin/internal use.
- */
-export const getPaymentStatus = async (tx_ref, { userId = null } = {}) => {
-  const payment = await paymentModel.findByTxRef(tx_ref);
-  if (!payment) throw new ApiError(404, "Payment not found");
+const updatePendingPayment = async (
+  id,
+  {
+    status,
+    transaction_id = null,
+    failure_reason = null,
+    gateway_response = null,
+    setPaidAt = false,
+  },
+  db = pool,
+) => {
+  const paymentId = normalizeId(id, "payment ID");
 
-  if (userId != null) {
-    const order = await orderModel.findByIdAndUser(payment.order_id, userId);
-    // Same error as "not found" so tx_refs cannot be probed
-    if (!order) throw new ApiError(404, "Payment not found");
+  if (!PAYMENT_STATUSES.has(status)) {
+    throw new ApiError(400, "Invalid payment status");
   }
 
-  if (payment.status !== PAYMENT_STATUS.PENDING) return payment;
-
-  // Still pending: re-verify (covers delayed or missed webhooks)
-  try {
-    const verification = await verifyTransaction(tx_ref);
-    if (verification.status === "success" || verification.status === "failed") {
-      await withTransaction((conn) =>
-        applyVerification(tx_ref, verification, conn),
-      );
-    }
-  } catch (err) {
-    // A gateway hiccup must not break a simple status read
-    console.error(`[payment] re-verify failed for ${tx_ref}:`, err);
+  if (
+    transaction_id != null &&
+    (typeof transaction_id !== "string" || transaction_id.length > 255)
+  ) {
+    throw new ApiError(400, "Invalid gateway transaction ID");
   }
 
-  return paymentModel.findByTxRef(tx_ref);
+  if (
+    failure_reason != null &&
+    (typeof failure_reason !== "string" || failure_reason.length > 255)
+  ) {
+    throw new ApiError(400, "Invalid payment failure reason");
+  }
+
+  const gatewayResponse = normalizeGatewayResponse(gateway_response);
+
+  const [result] = await getDb(db).execute(
+    `
+      UPDATE payments
+      SET
+        status = ?,
+        transaction_id = COALESCE(?, transaction_id),
+        failure_reason = ?,
+        gateway_response = COALESCE(?, gateway_response),
+        paid_at = CASE
+          WHEN ? = 1 THEN COALESCE(paid_at, CURRENT_TIMESTAMP)
+          ELSE paid_at
+        END
+      WHERE id = ?
+        AND status = 'pending'
+    `,
+    [
+      status,
+      transaction_id,
+      failure_reason,
+      gatewayResponse,
+      setPaidAt ? 1 : 0,
+      paymentId,
+    ],
+  );
+
+  return affectedRows(result) === 1;
 };
 
-// ---------- admin ----------
+/* =========================================================
+   Payment status transitions
+========================================================= */
 
-export const listPayments = async ({ status, limit, offset } = {}) => {
-  if (status && !PAYMENT_STATUSES.includes(status)) {
-    throw new ApiError(
-      400,
-      `status must be one of: ${PAYMENT_STATUSES.join(", ")}`,
-    );
+/**
+ * Mark completed only from pending.
+ *
+ * The caller should update the corresponding order in the same
+ * transaction. A unique-key violation is intentionally allowed to
+ * propagate so the transaction can roll back.
+ */
+export const markCompleted = async (
+  id,
+  {
+    transaction_id = null,
+    gateway_response = null,
+  } = {},
+  db = pool,
+) => {
+  return updatePendingPayment(
+    id,
+    {
+      status: "completed",
+      transaction_id,
+      failure_reason: null,
+      gateway_response,
+      setPaidAt: true,
+    },
+    db,
+  );
+};
+
+export const markFailed = async (
+  id,
+  {
+    transaction_id = null,
+    failure_reason = "Payment failed",
+    gateway_response = null,
+  } = {},
+  db = pool,
+) => {
+  return updatePendingPayment(
+    id,
+    {
+      status: "failed",
+      transaction_id,
+      failure_reason,
+      gateway_response,
+    },
+    db,
+  );
+};
+
+export const markCancelled = async (
+  id,
+  {
+    failure_reason = "Payment cancelled",
+    gateway_response = null,
+  } = {},
+  db = pool,
+) => {
+  return updatePendingPayment(
+    id,
+    {
+      status: "cancelled",
+      failure_reason,
+      gateway_response,
+    },
+    db,
+  );
+};
+
+export const markExpired = async (
+  id,
+  {
+    failure_reason = "Payment expired",
+    gateway_response = null,
+  } = {},
+  db = pool,
+) => {
+  return updatePendingPayment(
+    id,
+    {
+      status: "expired",
+      failure_reason,
+      gateway_response,
+    },
+    db,
+  );
+};
+
+export const markRefunded = async (
+  id,
+  {
+    transaction_id = null,
+    failure_reason = null,
+    gateway_response = null,
+  } = {},
+  db = pool,
+) => {
+  const paymentId = normalizeId(id, "payment ID");
+  const gatewayResponse = normalizeGatewayResponse(gateway_response);
+
+  if (
+    transaction_id != null &&
+    (typeof transaction_id !== "string" || transaction_id.length > 255)
+  ) {
+    throw new ApiError(400, "Invalid gateway transaction ID");
   }
 
-  const paging = parsePaging({ limit, offset });
+  if (
+    failure_reason != null &&
+    (typeof failure_reason !== "string" || failure_reason.length > 255)
+  ) {
+    throw new ApiError(400, "Invalid payment failure reason");
+  }
 
-  const [items, total] = await Promise.all([
-    paymentModel.findAll({ status: status || null, ...paging }),
-    paymentModel.countAll({ status: status || null }),
-  ]);
+  const [result] = await getDb(db).execute(
+    `
+      UPDATE payments
+      SET
+        status = 'refunded',
+        transaction_id = COALESCE(?, transaction_id),
+        failure_reason = ?,
+        gateway_response = COALESCE(?, gateway_response)
+      WHERE id = ?
+        AND status = 'completed'
+    `,
+    [transaction_id, failure_reason, gatewayResponse, paymentId],
+  );
 
-  return { items, total, ...paging };
+  return affectedRows(result) === 1;
+};
+
+/**
+ * Your service uses this when a gateway reports successful payment,
+ * but the payment cannot safely be applied to the order.
+ *
+ * IMPORTANT: the supplied payments table enum must include
+ * 'needs_review' before this method can be used.
+ */
+export const markNeedsReview = async (
+  id,
+  {
+    transaction_id = null,
+    failure_reason = "Payment requires manual review",
+    gateway_response = null,
+  } = {},
+  db = pool,
+) => {
+  const paymentId = normalizeId(id, "payment ID");
+
+  if (
+    transaction_id != null &&
+    (typeof transaction_id !== "string" || transaction_id.length > 255)
+  ) {
+    throw new ApiError(400, "Invalid gateway transaction ID");
+  }
+
+  if (
+    typeof failure_reason !== "string" ||
+    failure_reason.length > 255
+  ) {
+    throw new ApiError(400, "Invalid payment review reason");
+  }
+
+  const gatewayResponse = normalizeGatewayResponse(gateway_response);
+
+  const [result] = await getDb(db).execute(
+    `
+      UPDATE payments
+      SET
+        status = 'needs_review',
+        transaction_id = COALESCE(?, transaction_id),
+        failure_reason = ?,
+        gateway_response = COALESCE(?, gateway_response)
+      WHERE id = ?
+        AND status = 'pending'
+    `,
+    [
+      transaction_id,
+      failure_reason,
+      gatewayResponse,
+      paymentId,
+    ],
+  );
+
+  return affectedRows(result) === 1;
+};
+
+/* =========================================================
+   Admin listing and counts
+========================================================= */
+
+const normalizeOptionalStatus = (status) => {
+  if (status == null || status === "") return null;
+
+  if (typeof status !== "string" || !PAYMENT_STATUSES.has(status)) {
+    throw new ApiError(400, "Invalid payment status");
+  }
+
+  return status;
+};
+
+export const findAll = async ({
+  status = null,
+  limit = DEFAULT_LIMIT,
+  offset = 0,
+} = {}, db = pool) => {
+  const safeStatus = normalizeOptionalStatus(status);
+  const safeLimit = normalizeLimit(limit);
+  const safeOffset = normalizeOffset(offset);
+
+  const conditions = [];
+  const params = [];
+
+  if (safeStatus) {
+    conditions.push("status = ?");
+    params.push(safeStatus);
+  }
+
+  const where = conditions.length
+    ? `WHERE ${conditions.join(" AND ")}`
+    : "";
+
+  params.push(safeLimit, safeOffset);
+
+  return queryRows(
+    `
+      SELECT ${PAYMENT_COLUMNS}
+      FROM payments
+      ${where}
+      ORDER BY created_at DESC, id DESC
+      LIMIT ? OFFSET ?
+    `,
+    params,
+    db,
+  );
+};
+
+export const countAll = async ({ status = null } = {}, db = pool) => {
+  const safeStatus = normalizeOptionalStatus(status);
+
+  const conditions = [];
+  const params = [];
+
+  if (safeStatus) {
+    conditions.push("status = ?");
+    params.push(safeStatus);
+  }
+
+  const where = conditions.length
+    ? `WHERE ${conditions.join(" AND ")}`
+    : "";
+
+  const rows = await queryRows(
+    `
+      SELECT COUNT(*) AS total
+      FROM payments
+      ${where}
+    `,
+    params,
+    db,
+  );
+
+  return Number(rows[0]?.total ?? 0);
 };

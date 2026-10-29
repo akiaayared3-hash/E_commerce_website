@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { useCart } from "../page/CartContext";
+import { useCart } from "../context/CartContext";
 import "./css/Cart.css";
 
 const formatPrice = (p) => `ETB ${(p || 0).toLocaleString()}`;
@@ -66,7 +66,7 @@ const Cart = () => {
 
                 <div className="cart_info">
                   <span className="cart_cat">
-                    {product.category.replace("_", "-")}
+                    {product.category?.replace("_", "-")}
                   </span>
                   <h3>
                     <NavLink to={`/product/${product.id}`}>

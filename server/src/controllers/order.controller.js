@@ -8,21 +8,40 @@ const catchAsync = (fn) => (req, res, next) =>
 // ---------- customer ----------
 
 // POST /api/orders
-// body: { shipping_address_id }
+//
+// A) saved address:  { shipping_address_id, payment_method? }
+// B) new address:    { full_name, phone | phone_number, address | street,
+//                      region | delivery_zone, city?, sub_city?, woreda?,
+//                      note | landmark?, payment_method? }
+//
+// payment_method: "cod" (default) | "chapa" ("online" is accepted too)
+//
+// Response: 201 { status, data: { order } }                       (cod)
+//           201 { status, data: { order, payment: { tx_ref, checkout_url } } }
 export const createOrderHandler = catchAsync(async (req, res) => {
-  const { shipping_address_id } = req.body;
+  const body = req.body ?? {};
 
-  // Redirect URLs come from server config, never from the client
-  const result = await orderService.createOrderAndStartPayment(
-    req.user.id,
-    shipping_address_id,
-    {
-      callback_url: process.env.PAYMENT_CALLBACK_URL,
-      return_url: process.env.PAYMENT_RETURN_URL,
+  const { order, payment } = await orderService.placeOrder(req.user.id, {
+    shippingAddressId: body.shipping_address_id || null,
+    address: {
+      full_name: body.full_name,
+      phone: body.phone_number ?? body.phone,
+      street: body.address ?? body.street,
+      region: body.region ?? body.delivery_zone,
+      city: body.city,
+      sub_city: body.sub_city,
+      woreda: body.woreda,
+      landmark: body.note ?? body.landmark,
     },
-  );
+    paymentMethod: body.payment_method,
+    callback_url: process.env.PAYMENT_CALLBACK_URL,
+    return_url: process.env.PAYMENT_RETURN_URL,
+  });
 
-  res.status(201).json({ status: "success", data: result });
+  res.status(201).json({
+    status: "success",
+    data: payment ? { order, payment } : { order },
+  });
 });
 
 // GET /api/orders?page=1&limit=10
@@ -75,7 +94,7 @@ export const getOrderAdminHandler = catchAsync(async (req, res) => {
 export const updateOrderStatusHandler = catchAsync(async (req, res) => {
   const order = await orderService.updateOrderStatus(
     req.params.orderId,
-    req.body.status,
+    req.body?.status,
   );
 
   res.status(200).json({ status: "success", data: { order } });

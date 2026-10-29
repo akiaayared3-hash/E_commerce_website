@@ -1,0 +1,294 @@
+/* Product images + variants for the admin Products page.
+   Scoped with "pi-" (images) and "pv-" (variants / table helpers) so it
+   never collides with AdminPages.css. Import only from Products.jsx. */
+
+/* ---------- Section header ---------- */
+
+.pi-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.pi-count {
+  font-size: 12px;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+.pi-hint {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+.pi-warning {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 12.5px;
+}
+
+/* Visually hidden native input; the label acts as the button. */
+.pi-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pi-pick {
+  cursor: pointer;
+}
+
+.pi-pick[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---------- Drop zone ---------- */
+
+.pi-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 16px;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 13px;
+  text-align: center;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.pi-dropzone.is-dragging {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+/* ---------- Image cards ---------- */
+
+.pi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pi-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--sa-border, #e2e8f0);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.pi-card.is-primary {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px #2563eb;
+}
+
+.pi-preview {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  background: #f1f5f9;
+}
+
+.pi-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.pi-badge,
+.pi-index {
+  position: absolute;
+  top: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.pi-badge {
+  left: 8px;
+  background: #2563eb;
+}
+
+.pi-index {
+  right: 8px;
+  min-width: 22px;
+  background: rgb(15 23 42 / 70%);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.pi-card-body {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.pi-card-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 10px 10px;
+}
+
+.pi-card-actions .sa-icon-btn.is-on {
+  color: #2563eb;
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.pi-card-actions .sa-icon-btn.is-on svg {
+  fill: currentColor;
+}
+
+/* ---------- Shared small field ---------- */
+
+.pv-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pv-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.pv-field input,
+.pv-field select {
+  width: 100%;
+  min-width: 0;
+}
+
+/* ---------- Variants ---------- */
+
+.pv-list {
+  display: grid;
+  gap: 12px;
+}
+
+.pv-card {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--sa-border, #e2e8f0);
+  border-radius: 10px;
+  background: var(--sa-bg-soft, #f8fafc);
+}
+
+.pv-card.is-inactive {
+  opacity: 0.75;
+}
+
+.pv-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.pv-card-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pv-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #475569;
+  cursor: pointer;
+}
+
+.pv-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.pv-color-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pv-color-row input:first-child {
+  flex: 1 1 auto;
+}
+
+.pv-swatch-input {
+  flex: 0 0 auto;
+  width: 38px !important;
+  height: 38px;
+  padding: 2px !important;
+  border: 1px solid var(--sa-border, #e2e8f0);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+/* ---------- Table: hide secondary columns on small screens ---------- */
+
+@media (max-width: 760px) {
+  .pv-hide-sm {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .pv-hide-xs {
+    display: none;
+  }
+
+  .pi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pv-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pi-dropzone {
+    padding: 16px 12px;
+  }
+}
+
+@media (max-width: 380px) {
+  .pv-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pi-dropzone {
+    transition: none;
+  }
+}

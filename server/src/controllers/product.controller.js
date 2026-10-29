@@ -1,3 +1,4 @@
+// controllers/product.controller.js
 import { asyncHandler } from "../utils/asyncHandler.util.js";
 import {
   getProduct,
@@ -5,11 +6,9 @@ import {
   getAllProducts,
   createProduct,
   updateProduct,
-  setProductStatus
+  setProductStatus,
 } from "../services/product.service.js";
-import { success } from "zod";
 
-// Public routes have no `protect`, so req.user can be missing.
 const isAdminRequest = (req) => req.user?.role === "admin";
 
 export const getAll = asyncHandler(async (req, res) => {
@@ -35,35 +34,67 @@ export const getBySlug = asyncHandler(async (req, res) => {
 });
 
 export const create = asyncHandler(async (req, res) => {
-  const product = await createProduct(req.body);
+  const product = await createProduct(req.body, {
+    files: req.files ?? [],
+  });
   res.status(201).json({ success: true, product });
 });
 
-export const update = asyncHandler(async(req,resp) => {
-   const product = await updateProduct(req.params.id, req.body) 
-  resp.status(200).json({
+export const update = asyncHandler(async (req, res) => {
+  const product = await updateProduct(req.params.id, req.body, {
+    files: req.files ?? [],
+  });
+  res.status(200).json({
     success: true,
-    message: "Update successfully",
-    product
-  })
-   
-})
+    message: "Product updated successfully",
+    product,
+  });
+});
 
-export const updateStatus = asyncHandler(async(req, resp) => {
-  const product = await setProductStatus(req.params.id, req.body?.is_active) 
-  resp.status(200).json({
-    success: true,
-    product
-  })
-})
+export const updateStatus = asyncHandler(async (req, res) => {
+  const productId = req.params.id;
 
-export const remove = asyncHandler(async(req,resp) => {
-  const product = await setProductStatus(req.params.id, false) 
-  
-  resp.status(200).json({
+  if (!/^[1-9]\d*$/.test(productId)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid product ID.",
+    });
+  }
+
+  const { is_active } = req.body ?? {};
+
+  if (typeof is_active !== "boolean") {
+    return res.status(400).json({
+      success: false,
+      message: 'The "is_active" field must be a Boolean.',
+      example: { is_active: true },
+    });
+  }
+
+  const product = await setProductStatus(productId, is_active);
+
+  return res.status(200).json({
     success: true,
-    message: 'Product delete successfully',
-    product
-  })
-  
-})
+    message: `Product ${is_active ? "activated" : "deactivated"} successfully.`,
+    product,
+  });
+});
+
+export const remove = asyncHandler(async (req, res) => {
+  const productId = req.params.id;
+
+  if (!/^[1-9]\d*$/.test(productId)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid product ID.",
+    });
+  }
+
+  const product = await setProductStatus(productId, false);
+
+  return res.status(200).json({
+    success: true,
+    message: "Product deactivated successfully.",
+    product,
+  });
+});

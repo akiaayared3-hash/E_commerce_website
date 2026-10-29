@@ -1,55 +1,98 @@
+import dotenv from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { z } from "zod";
 
-import dotenv from 'dotenv';
-import path from 'path';
-import { success, z } from 'zod';
-import { fileURLToPath } from 'url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Loads the local .env file if it exists. It never overrides variables already
+// set by the host, so production platform settings always win.
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
-const envPath = path.resolve(__dirname, "../../.env");
-dotenv.config({path: envPath});
+// Treat empty values (e.g. `STRIPE_SECRET_KEY=`) as not set.
+const rawEnv = Object.fromEntries(
+  Object.entries(process.env).filter(
+    ([, value]) => value !== undefined && value !== "",
+  ),
+);
 
-// define the validation schema
+const url = (name) =>
+  z.string().min(1, `${name} is required`).url(`${name} must be a valid URL`);
 
-const envSchema = z.object({
-  NODE_ENV: z
-    .enum(["development", "production", "test"])
-    .default("development"),
-  PORT: z.coerce.number().default(3000),
-  // database seatings
+const envSchema = z
+  .object({
+    NODE_ENV: z
+      .enum(["development", "production", "test"])
+      .default("development"),
+    PORT: z.coerce.number().int().positive().default(3000),
 
-  DB_HOST: z.string().min(1, "127.0.0.1"),
-  DB_PORT: z.coerce.number().default(8889),
-  DB_USER: z.string().min(1, "root"),
-  DB_PASSWORD: z.string().optional().default("XLNx2rl7z]Nx0vxd"),
-  DB_NAME: z.string().min(1, "E_commerce_api"),
+    // URLs
+    PUBLIC_API_URL: url("PUBLIC_API_URL"),
+    CLIENT_URL: url("CLIENT_URL"),
 
-  // authentication and security
+    // Database
+    DB_HOST: z.string().min(1, "DB_HOST is required"),
+    DB_PORT: z.coerce.number().int().positive().default(3306),
+    DB_USER: z.string().min(1, "DB_USER is required"),
+    DB_PASSWORD: z.string().optional(),
+    DB_NAME: z.string().min(1, "DB_NAME is required"),
 
-  JWT_SECRET: z.string().min(32, "JWT_SECRET is minimum 32 long characters"),
-  JWT_EXPIRES_IN: z.string().default("7d"),
+    // Auth
+    JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
+    JWT_EXPIRES_IN: z.string().default("7d"),
 
-  // payment integration
+    // Payments
+    STRIPE_SECRET_KEY: z.string().optional(),
+    STRIPE_WEBHOOK_SECRET: z.string().optional(),
+    PAYMENT_RETURN_URL: z.string().optional(),
+    PAYMENT_CALLBACK_URL: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const fail = (path, message) =>
+      ctx.addIssue({ code: "custom", path: [path], message });
 
-  STRIPE_SECRET_KEY: z.string().optional(),
-  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+    for (const key of ["PUBLIC_API_URL", "CLIENT_URL"]) {
+      try {
+        const { protocol } = new URL(value[key]);
+        if (!["http:", "https:"].includes(protocol))
+          fail(key, "Must use HTTP or HTTPS");
+        if (value.NODE_ENV === "production" && protocol !== "https:") {
+          fail(key, "Must use HTTPS in production");
+        }
+      } catch {
+        // Invalid URLs are already reported by the field rule above.
+      }
+    }
 
-  // cors configuration
+    if (value.NODE_ENV === "production") {
+      if (!value.DB_PASSWORD) fail("DB_PASSWORD", "Required in production");
+      if (/change|example|secret|password/i.test(value.JWT_SECRET)) {
+        fail("JWT_SECRET", "Looks like a placeholder, generate a random value");
+      }
+    }
+  });
 
-  CLIENT_URL: z.string().url().default(`https://localhost:3000`),
-});
+const result = envSchema.safeParse(rawEnv);
 
-// validate process.env gaines the schema 
-
-const parseResult = envSchema.safeParse(process.env)
-
-if (!parseResult.success) {
- console.log("invalid inevaironmental detected")
- console.error(parseResult.error.format())
- process.exit(1)
-
+if (!result.success) {
+  console.error("Invalid environment configuration:");
+  for (const issue of result.error.issues) {
+    // Only print the variable name and the problem, never the value.
+    console.error(`  - ${issue.path.join(".") || "(root)"}: ${issue.message}`);
+  }
+  process.exit(1);
 }
 
-export const config = parseResult.data;
+const data = result.data;
+
+export const config = Object.freeze({
+  ...data,
+  // Normalize to a bare origin: no path, no trailing slash.
+  PUBLIC_API_URL: new URL(data.PUBLIC_API_URL).origin,
+  CLIENT_URL: new URL(data.CLIENT_URL).origin,
+  isProduction: data.NODE_ENV === "production",
+  isDevelopment: data.NODE_ENV === "development",
+  isTest: data.NODE_ENV === "test",
+});
+
 export default config;

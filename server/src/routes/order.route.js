@@ -1,9 +1,10 @@
-// routes/order.routes.js
 import { Router } from "express";
 import {
   protect,
   restrictTo,
-} from "../middlewares/authenthicate.middlewares.js"; // spelling kept as in your project
+} from "../middlewares/authenthicate.middlewares.js";
+import { ApiError } from "../utils/apiError.util.js";
+
 import {
   createOrderHandler,
   getMyOrdersHandler,
@@ -16,22 +17,41 @@ import {
 
 const router = Router();
 
-// Every order route needs a logged-in user.
-// The payment webhook must be mounted OUTSIDE this router (no user token).
+const isValidId = (value) =>
+  typeof value === "string" &&
+  /^[1-9]\d{0,14}$/.test(value) &&
+  Number.isSafeInteger(Number(value));
+
 router.use(protect);
 
-// Admin routes first, so "admin" is never read as an order id
+router.use((req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
+
+router.param("orderId", (req, res, next, value) => {
+  if (!isValidId(value)) {
+    return next(new ApiError(400, "Order id must be a positive whole number"));
+  }
+
+  next();
+});
+
+// Customer routes
+router.post("/", createOrderHandler);
+router.get("/", getMyOrdersHandler);
+
+// Admin routes
 router.get("/admin/all", restrictTo("admin"), getAllOrdersHandler);
 router.get("/admin/:orderId", restrictTo("admin"), getOrderAdminHandler);
+
 router.patch(
   "/admin/:orderId/status",
   restrictTo("admin"),
   updateOrderStatusHandler,
 );
 
-// Customer routes
-router.post("/", createOrderHandler);
-router.get("/", getMyOrdersHandler);
+// Individual customer orders
 router.get("/:orderId", getMyOrderHandler);
 router.patch("/:orderId/cancel", cancelMyOrderHandler);
 

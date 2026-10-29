@@ -298,8 +298,8 @@ const baseProducts = [
     image: compleat4,
     images: [compleat4, compleat4Back, compleat4Left, compleat4Right],
     description: "A stylish men's outfit.",
-    new_price: 150, // check: same as the belt, probably a placeholder
-    old_price: 200,
+    new_price: 15000, // check: same as the belt, probably a placeholder
+    old_price: 15800,
   },
   {
     id: 11,

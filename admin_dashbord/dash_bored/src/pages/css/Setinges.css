@@ -1,0 +1,167 @@
+.st-page { padding: 24px; }
+.st-title { margin: 0 0 20px; font-size: 22px; font-weight: 700; color: #111827; }
+
+/* Alert */
+.st-alert {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  font-size: 14px;
+  border-radius: 10px;
+  animation: st-in 0.2s ease;
+}
+.st-alert.ok { color: #166534; background: #dcfce7; border: 1px solid #bbf7d0; }
+.st-alert.error { color: #991b1b; background: #fee2e2; border: 1px solid #fecaca; }
+@keyframes st-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Layout */
+.st-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+/* Tabs */
+.st-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+}
+.st-tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: #374151;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.st-tab svg { color: #6b7280; }
+.st-tab:hover { background: #f3f4f6; }
+.st-tab.active { color: #6366f1; font-weight: 600; background: rgba(99, 102, 241, 0.1); }
+.st-tab.active svg { color: #6366f1; }
+.st-tab:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.35); }
+
+/* Card */
+.st-card {
+  max-width: 560px;
+  padding: 24px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 10px 25px -15px rgba(15, 23, 42, 0.2);
+  animation: st-in 0.2s ease;
+}
+.st-card h3 { margin: 0; font-size: 17px; color: #111827; }
+.st-sub { margin: 4px 0 20px; font-size: 13px; color: #6b7280; }
+
+/* Fields */
+.st-field { display: block; margin-bottom: 16px; }
+.st-field span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+}
+.st-field input,
+.st-field select {
+  width: 100%;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: #111827;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.st-field input:focus,
+.st-field select:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+}
+
+/* Toggle rows */
+.st-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-top: 1px solid #f3f4f6;
+  cursor: pointer;
+}
+.st-toggle-label { display: block; font-size: 14px; font-weight: 500; color: #111827; }
+.st-toggle-hint { display: block; margin-top: 2px; font-size: 12px; color: #6b7280; }
+
+.st-switch {
+  appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 42px;
+  height: 24px;
+  margin: 0;
+  background: #d1d5db;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.st-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s;
+}
+.st-switch:checked { background: #6366f1; }
+.st-switch:checked::after { transform: translateX(18px); }
+.st-switch:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.35); }
+
+/* Button */
+.st-btn {
+  margin-top: 8px;
+  padding: 10px 18px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: #6366f1;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.st-btn:hover { background: #4f46e5; }
+
+/* Responsive */
+@media (max-width: 800px) {
+  .st-layout { grid-template-columns: 1fr; }
+  .st-tabs { flex-direction: row; overflow-x: auto; }
+  .st-tab { white-space: nowrap; }
+  .st-card { max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .st-alert, .st-card { animation: none; }
+  .st-switch, .st-switch::after { transition: none; }
+}

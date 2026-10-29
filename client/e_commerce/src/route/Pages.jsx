@@ -1,12 +1,7 @@
-import React from 'react';
-import {
-    BrowserRouter,
-    Routes,
-    Route,
-    Navigate,
+import React from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-    } from 'react-router-dom';
-import NaveBar from '../component/NavBar/NavBar';
+import NaveBar from "../component/NavBar/NavBar";
 import Footer from "../component/footer/Footer";
 import HomePage from "../component/HomePages/HomePage";
 import Category from "../page/Category";
@@ -14,23 +9,27 @@ import Contacts from "../component/contacts/Contacts";
 import Product from "../page/Product";
 import LoginSignup from "../page/LoginSignup";
 import Cart from "../page/Cart";
-import { WishList } from '../page/WishList';
+import { WishList } from "../page/WishList";
 import WishlistPage from "../page/WhisListPage";
-import ScrollToTop from '../component/ScrollToTop/ScrollToTop';
-import { CartProvider } from "../page/CartContext";  
+import ScrollToTop from "../component/ScrollToTop/ScrollToTop";
 import Checkout from "../component/checkOut/CheckOut";
 import OrderSuccess from "../page/OrderSuccess";
-import SearchPage from "../page/Searchpage";  
-import { categories as products } from "../../src/component/Assets/product.js";   
+import SearchPage from "../page/Searchpage";
+import { categories as products } from "../../src/component/Assets/product.js";
+import { AuthProvider } from "../context/AuthContext.jsx";
+import ProtectedRoute from "../page/ProtectedRoute.jsx";
+import Profile from "../page/Profile.jsx";
 
+// ✅ Only one correct import
+import { CartProvider } from "../context/CartContext.jsx";
 
 const Pages = () => {
   return (
-    <>
-      <CartProvider>
-        <WishList>
-          <BrowserRouter>
-            <ScrollToTop />
+    <CartProvider>
+      <WishList>
+        <BrowserRouter>
+          <ScrollToTop />
+          <AuthProvider>
             <NaveBar />
             <Routes>
               <Route
@@ -59,26 +58,44 @@ const Pages = () => {
 
               <Route path="/contacts" element={<Contacts />} />
               <Route path="/login" element={<LoginSignup />} />
+
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <Profile />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/cart" element={<Cart />} />
               <Route path="/wishList" element={<WishlistPage />} />
               <Route path="/product/:productId" element={<Product />} />
 
               <Route
-                path="*"
-                element={<h1 style={{ padding: 40 }}>Page not found</h1>}
+                path="/checkout"
+                element={
+                  <ProtectedRoute>
+                    <Checkout />
+                  </ProtectedRoute>
+                }
               />
-              <Route path="/checkout" element={<Checkout />} />
               <Route
                 path="/order-success/:orderId"
                 element={<OrderSuccess />}
               />
+
+              {/* 404 – keep it last */}
+              <Route
+                path="*"
+                element={<h1 style={{ padding: 40 }}>Page not found</h1>}
+              />
             </Routes>
             <Footer />
-          </BrowserRouter>
-        </WishList>
-      </CartProvider>
-    </>
+          </AuthProvider>
+        </BrowserRouter>
+      </WishList>
+    </CartProvider>
   );
-}
+};
 
-export default Pages
+export default Pages;

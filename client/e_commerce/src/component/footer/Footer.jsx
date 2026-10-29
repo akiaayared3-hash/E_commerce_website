@@ -9,12 +9,56 @@ import {
   FaEnvelope,
   FaPhoneAlt,
   FaClock,
+  FaArrowUp,
 } from "react-icons/fa";
 
 import footer_logo from "../Assets/logo_footer.png";
 import "./Footer.css";
 
-const paymentMethods = [
+/* ---------- Config: edit your real data here ---------- */
+const BRAND = {
+  name: "Your Boutique Name",
+  email: "info@yourboutique.com",
+  phone: "+251 90 000 0000",
+  phoneHref: "tel:+251900000000",
+  address: "Debre Birhan, Ethiopia",
+  mapUrl:
+    "https://www.google.com/maps/search/?api=1&query=Debre+Birhan+Ethiopia",
+  hours: "Mon – Sat: 9:00 AM – 8:00 PM",
+};
+
+const NEWSLETTER_ENDPOINT = "/api/newsletter"; // change to your real endpoint
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const SOCIALS = [
+  { label: "Facebook", href: "https://facebook.com", icon: FaFacebookF },
+  { label: "Instagram", href: "https://instagram.com", icon: FaInstagram },
+  { label: "TikTok", href: "https://tiktok.com", icon: FaTiktok },
+  { label: "Telegram", href: "https://t.me", icon: FaTelegramPlane },
+];
+
+const SHOP_LINKS = [
+  { label: "Home", to: "/" },
+  { label: "New Arrivals", to: "/new_arrivals" },
+  { label: "Clothes", to: "/clothes" },
+  { label: "Shoes", to: "/shoes" },
+  { label: "T-Shirts", to: "/t_shirt" },
+];
+
+const CARE_LINKS = [
+  { label: "FAQ", to: "/faq" },
+  { label: "Shipping & Returns", to: "/shipping-returns" },
+  { label: "Size Guide", to: "/size-guide" },
+  { label: "Track Order", to: "/track-order" },
+  { label: "Contact Us", to: "/contacts" },
+];
+
+const LEGAL_LINKS = [
+  { label: "Privacy Policy", to: "/privacy" },
+  { label: "Terms & Conditions", to: "/terms" },
+];
+
+const PAYMENT_METHODS = [
   "Telebirr",
   "CBE Birr",
   "Chapa",
@@ -24,177 +68,217 @@ const paymentMethods = [
   "Cash on Delivery",
 ];
 
+const YEAR = new Date().getFullYear();
+
+/* ---------- Component ---------- */
 const Footer = () => {
   const [email, setEmail] = useState("");
-  const year = new Date().getFullYear();
+  const [status, setStatus] = useState("idle"); // idle | loading | success | error
+  const [message, setMessage] = useState("");
 
-  const handleSubscribe = (e) => {
+  const handleSubscribe = async (e) => {
     e.preventDefault();
-    // TODO: send email to your backend
-    console.log("Subscribed:", email);
-    setEmail("");
+    if (status === "loading") return;
+
+    const value = email.trim();
+    if (!EMAIL_REGEX.test(value)) {
+      setStatus("error");
+      setMessage("Please enter a valid email address.");
+      return;
+    }
+
+    setStatus("loading");
+    setMessage("");
+
+    try {
+      const res = await fetch(NEWSLETTER_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: value }),
+      });
+      if (!res.ok) throw new Error("Request failed");
+
+      setStatus("success");
+      setMessage("Thanks for subscribing!");
+      setEmail("");
+    } catch {
+      setStatus("error");
+      setMessage("Something went wrong. Please try again.");
+    }
+  };
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
     <footer className="footer-wrapper">
-      <div className="footer-main">
-        {/* about */}
-        <div className="about_house">
-          <div className="footer_logo">
-            <NavLink to="/">
-              <img src={footer_logo} alt="Company logo" />
-            </NavLink>
+      <div className="footer-container">
+        <div className="footer-main">
+          {/* About */}
+          <div className="about_house">
+            <div className="footer_logo">
+              <NavLink to="/" aria-label={`${BRAND.name} home`}>
+                <img
+                  src={footer_logo}
+                  alt={`${BRAND.name} logo`}
+                  width="180"
+                  height="44"
+                  loading="lazy"
+                />
+              </NavLink>
+            </div>
+            <p className="about-text">
+              Curating the finest quality clothing and shoes for a sophisticated
+              lifestyle.
+            </p>
+            <div className="social-media-icon">
+              {SOCIALS.map(({ label, href, icon: Icon }) => (
+                <a
+                  key={label}
+                  href={href}
+                  aria-label={label}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Icon aria-hidden="true" />
+                </a>
+              ))}
+            </div>
           </div>
-          <p className="about-text">
-            Curating the finest quality clothing and shoes for a sophisticated
-            lifestyle.
+
+          {/* Shop */}
+          <nav className="footer_col" aria-label="Shop">
+            <h3>Shop</h3>
+            <ul>
+              {SHOP_LINKS.map(({ label, to }) => (
+                <li key={to}>
+                  <NavLink to={to} end={to === "/"}>
+                    {label}
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          {/* Customer care */}
+          <nav className="footer_col" aria-label="Customer care">
+            <h3>Customer Care</h3>
+            <ul>
+              {CARE_LINKS.map(({ label, to }) => (
+                <li key={to}>
+                  <NavLink to={to}>{label}</NavLink>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          {/* Contact */}
+          <div className="footer_col contact_info">
+            <h3>Visit Us</h3>
+            <ul>
+              <li>
+                <FaMapMarkerAlt className="contact_icon" aria-hidden="true" />
+                <a
+                  href={BRAND.mapUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {BRAND.address}
+                </a>
+              </li>
+              <li>
+                <FaEnvelope className="contact_icon" aria-hidden="true" />
+                <a href={`mailto:${BRAND.email}`}>{BRAND.email}</a>
+              </li>
+              <li>
+                <FaPhoneAlt className="contact_icon" aria-hidden="true" />
+                <a href={BRAND.phoneHref}>{BRAND.phone}</a>
+              </li>
+              <li>
+                <FaClock className="contact_icon" aria-hidden="true" />
+                <span>{BRAND.hours}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Newsletter */}
+        <div className="footer-newsletter">
+          <div className="newsletter_text">
+            <h3>Join Our Community</h3>
+            <p>Get early access to new arrivals and exclusive offers.</p>
+          </div>
+
+          <div className="newsletter_form_wrap">
+            <form onSubmit={handleSubscribe} noValidate>
+              <label htmlFor="footer-email" className="visually-hidden">
+                Email address
+              </label>
+              <input
+                id="footer-email"
+                type="email"
+                placeholder="Your email address"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (status !== "idle" && status !== "loading") {
+                    setStatus("idle");
+                    setMessage("");
+                  }
+                }}
+                aria-invalid={status === "error"}
+                aria-describedby="newsletter-message"
+                required
+              />
+              <button type="submit" disabled={status === "loading"}>
+                {status === "loading" ? "Subscribing..." : "Subscribe"}
+              </button>
+            </form>
+            <p
+              id="newsletter-message"
+              className={`newsletter_message ${status}`}
+              role="status"
+              aria-live="polite"
+            >
+              {message}
+            </p>
+          </div>
+        </div>
+
+        {/* Payments */}
+        <div className="footer-payments">
+          <span className="payments_title">We Accept</span>
+          <ul>
+            {PAYMENT_METHODS.map((method) => (
+              <li key={method} className="payment_badge">
+                {method}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Bottom */}
+        <div className="footer-bottom">
+          <p>
+            © {YEAR} {BRAND.name}. All rights reserved.
           </p>
-          <div className="social-media-icon">
-            <a
-              href="https://facebook.com"
-              aria-label="Facebook"
-              target="_blank"
-              rel="noreferrer"
-            >
-              <FaFacebookF />
-            </a>
-            <a
-              href="https://instagram.com"
-              aria-label="Instagram"
-              target="_blank"
-              rel="noreferrer"
-            >
-              <FaInstagram />
-            </a>
-            <a
-              href="https://tiktok.com"
-              aria-label="TikTok"
-              target="_blank"
-              rel="noreferrer"
-            >
-              <FaTiktok />
-            </a>
-            <a
-              href="https://t.me"
-              aria-label="Telegram"
-              target="_blank"
-              rel="noreferrer"
-            >
-              <FaTelegramPlane />
-            </a>
+          <div className="footer-legal">
+            {LEGAL_LINKS.map(({ label, to }) => (
+              <NavLink key={to} to={to}>
+                {label}
+              </NavLink>
+            ))}
           </div>
-        </div>
-
-        {/* shop */}
-        <div className="footer_col">
-          <h4>Shop</h4>
-          <ul>
-            <li>
-              <NavLink to="/">Home</NavLink>
-            </li>
-            <li>
-              <NavLink to="/new_arrivals">New Arrivals</NavLink>
-            </li>
-            <li>
-              <NavLink to="/clothes">Clothes</NavLink>
-            </li>
-            <li>
-              <NavLink to="/shoes">Shoes</NavLink>
-            </li>
-            <li>
-              <NavLink to="/t_shirt">T_shirt</NavLink>
-            </li>
-            <li>
-              <NavLink to="/contacts">Contacts</NavLink>
-            </li>
-          </ul>
-        </div>
-
-        {/* customer care */}
-        <div className="footer_col">
-          <h4>Customer Care</h4>
-          <ul>
-            <li>
-              <NavLink to="/faq">FAQ</NavLink>
-            </li>
-            <li>
-              <NavLink to="/shipping-returns">Shipping &amp; Returns</NavLink>
-            </li>
-            <li>
-              <NavLink to="/size-guide">Size Guide</NavLink>
-            </li>
-            <li>
-              <NavLink to="/track-order">Track Order</NavLink>
-            </li>
-          </ul>
-        </div>
-
-        {/* contact */}
-        <div className="footer_col contact_info">
-          <h4>Visit Us</h4>
-          <ul>
-            <li>
-              <FaMapMarkerAlt className="contact_icon" />
-              <a
-                href="https://maps.google.com/?q=Your+Boutique+Address+Addis+Ababa"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Debre Birhan, Ethiopia
-              </a>
-            </li>
-            <li>
-              <FaEnvelope className="contact_icon" />
-              <a href="mailto:info@yourboutique.com">info@yourboutique.com</a>
-            </li>
-            <li>
-              <FaPhoneAlt className="contact_icon" />
-              <a href="tel:+251900000000">+251 90 000 0000</a>
-            </li>
-            <li>
-              <FaClock className="contact_icon" />
-              <span>Mon – Sat: 9:00 AM – 8:00 PM</span>
-            </li>
-          </ul>
-        </div>
-      </div>
-
-      {/* newsletter */}
-      <div className="footer-newsletter">
-        <div className="newsletter_text">
-          <h4>Join Our Community</h4>
-          <p>Get early access to new arrivals and exclusive offers.</p>
-        </div>
-        <form onSubmit={handleSubscribe}>
-          <input
-            type="email"
-            placeholder="Your email address"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <button type="submit">Subscribe</button>
-        </form>
-      </div>
-
-      {/* payment methods */}
-      <div className="footer-payments">
-        <span className="payments_title">We Accept</span>
-        <ul>
-          {paymentMethods.map((method) => (
-            <li key={method} className="payment_badge">
-              {method}
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {/* copyright */}
-      <div className="footer-bottom">
-        <p>© {year} Your Boutique Name. All rights reserved.</p>
-        <div className="footer-legal">
-          <NavLink to="/privacy">Privacy Policy</NavLink>
-          <NavLink to="/terms">Terms &amp; Conditions</NavLink>
+          <button
+            type="button"
+            className="back-to-top"
+            onClick={scrollToTop}
+            aria-label="Back to top"
+          >
+            <FaArrowUp aria-hidden="true" />
+          </button>
         </div>
       </div>
     </footer>

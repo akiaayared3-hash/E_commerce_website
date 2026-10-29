@@ -1,30 +1,36 @@
-// utils/payment.util.js  (Chapa client; needs Node 18+ for the built-in fetch)
+// utils/payments.util.js
 import crypto from "crypto";
 import { ApiError } from "./apiError.util.js";
 
 export const PAYMENT_GATEWAY = "chapa";
 export const DEFAULT_CURRENCY = "ETB";
 
-const REQUEST_TIMEOUT_MS = 10000;
+const REQUEST_TIMEOUT_MS =
+  Number(process.env.PAYMENT_REQUEST_TIMEOUT_MS) || 10_000;
 
-// ---------- config (read at call time, so .env is already loaded) ----------
+// ---------- config (read at call time) ----------
 
 const secretKey = () => {
   const key = process.env.CHAPA_SECRET_KEY;
   if (!key) {
-    console.error("CHAPA_SECRET_KEY is missing in .env");
+    console.error("[payment] CHAPA_SECRET_KEY is missing");
     throw new ApiError(500, "Payment service is not configured");
   }
   return key;
 };
+
+const webhookSecret = () => process.env.CHAPA_WEBHOOK_SECRET || secretKey();
 
 const baseUrl = () =>
   (process.env.CHAPA_BASE_URL || "https://api.chapa.co/v1").replace(/\/$/, "");
 
 // ---------- helpers ----------
 
-// our own unique reference, created BEFORE calling the gateway
-// (check Chapa's current maximum length for tx_ref; this one is 29 characters)
+/**
+ * Generate a unique tx_ref before calling the gateway.
+ * Format: shop-<24 hex chars>  → 29 characters total.
+ * Confirm current Chapa max length if you change this.
+ */
 export const generateTxRef = () =>
   `shop-${crypto.randomBytes(12).toString("hex")}`;
 
@@ -37,7 +43,12 @@ const safeEqual = (a, b) => {
   return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
 };
 
-// one place for every HTTP call: timeout, JSON parsing, no secrets in logs
+/**
+ * Single place for every HTTP call to Chapa.
+ * - Timeout
+ * - JSON parsing
+ * - Never logs secrets or full headers
+ */
 const request = async (path, { method = "GET", body } = {}) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -59,10 +70,10 @@ const request = async (path, { method = "GET", body } = {}) => {
     } catch {
       data = null;
     }
+
     return { ok: response.ok, status: response.status, data };
   } catch (error) {
-    // network error or timeout: log the type only, never headers or keys
-    console.error("Payment gateway request failed:", error.name);
+    console.error("[payment] gateway request failed:", error.name);
     throw new ApiError(
       502,
       "Payment service is not reachable, please try again",
@@ -72,7 +83,7 @@ const request = async (path, { method = "GET", body } = {}) => {
   }
 };
 
-// ---------- public functions ----------
+// ---------- public API ----------
 
 /**
  * Starts a payment. Returns { checkout_url }.
@@ -104,8 +115,7 @@ export const initializePayment = async ({
   const checkout_url = data?.data?.checkout_url;
 
   if (!ok || data?.status !== "success" || !checkout_url) {
-    // log the gateway's message for yourself, but never send it to the customer
-    console.error("Chapa initialize failed:", status, data?.message);
+    console.error("[payment] Chapa initialize failed:", status, data?.message);
     throw new ApiError(502, "Could not start the payment, please try again");
   }
 
@@ -123,13 +133,13 @@ export const verifyTransaction = async (tx_ref) => {
     `/transaction/verify/${encodeURIComponent(tx_ref)}`,
   );
 
-  // the gateway does not know this reference (never opened, or wrong)
+  // Gateway does not know this reference
   if (status === 404) {
     return { status: "not_found", tx_ref, raw: data };
   }
 
   if (!ok || !data?.data) {
-    console.error("Chapa verify failed:", status, data?.message);
+    console.error("[payment] Chapa verify failed:", status, data?.message);
     throw new ApiError(502, "Could not verify the payment, please try again");
   }
 
@@ -151,33 +161,37 @@ export const verifyTransaction = async (tx_ref) => {
 };
 
 /**
- * Checks that a webhook really comes from the gateway.
- * rawBody MUST be the exact bytes received (Buffer or string), not re-stringified JSON.
- * headers: req.headers (Node lower-cases header names).
+ * Verifies that a webhook really comes from Chapa.
+ *
+ * rawBody MUST be the exact bytes received (Buffer or string).
+ * Never pass a re-stringified object.
+ *
+ * Headers: req.headers (Node lower-cases them).
  */
 export const verifyWebhookSignature = (rawBody, headers) => {
   if (!rawBody) return false;
 
-  const secret = process.env.CHAPA_WEBHOOK_SECRET || secretKey();
-
+  const secret = webhookSecret();
   const payloadSignature = headers["x-chapa-signature"];
   const secretSignature = headers["chapa-signature"];
 
   if (!payloadSignature && !secretSignature) return false;
 
-  // x-chapa-signature: HMAC of the event payload
+  // x-chapa-signature → HMAC of the event payload
   if (
     payloadSignature &&
     safeEqual(payloadSignature, hmacSha256(rawBody, secret))
   ) {
     return true;
   }
-  // chapa-signature: HMAC of the secret itself
+
+  // chapa-signature → HMAC of the secret itself
   if (
     secretSignature &&
     safeEqual(secretSignature, hmacSha256(secret, secret))
   ) {
     return true;
   }
+
   return false;
 };

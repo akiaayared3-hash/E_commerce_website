@@ -1,24 +1,18 @@
 import { useState } from "react";
-import {
-  FaRegUser,
-  FaRegHeart,
-  FaShoppingBag,
-  FaBars,
-  FaTimes,
-} from "react-icons/fa";
 import { NavLink } from "react-router-dom";
+import { FaRegHeart, FaShoppingBag, FaBars, FaTimes } from "react-icons/fa";
+import AccountMenu from "../AccountMenu/AccountMenu";
 import { useWishList } from "../../page/WishList";
-
-import "./NavBar.css";
+import { useCart } from "../../context/CartContext"; // ← correct path
 import { categories as products } from "../Assets/product.js";
 import logo_headers from "../Assets/logo_headers.png";
-import { useCart } from "../../page/CartContext";
 import ProductSearch from "../ProductSearch/ProductSearch.jsx";
+import "./NavBar.css";
 
 const NavBar = () => {
   const [open, setOpen] = useState(false);
   const { count } = useWishList();
-  const { count: cartCount } = useCart();
+  const { count: cartCount } = useCart(); // ← only call hooks inside the component
 
   const closeMenu = () => setOpen(false);
 
@@ -86,9 +80,7 @@ const NavBar = () => {
           </nav>
 
           <div className="action_headers">
-            <NavLink to="/login" aria-label="Login" className="header_action">
-              <FaRegUser />
-            </NavLink>
+            <AccountMenu />
             <NavLink
               to="/wishList"
               aria-label={`Wishlist, ${count} items`}
