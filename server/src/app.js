@@ -45,13 +45,21 @@ if (config.isProduction) {
 // from this API. Helmet's default would block them.
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 
+const allowedOrigins = [config.CLIENT_URL, config.ADMIN_URL].filter(Boolean);
+
 app.use(
   cors({
-    origin: [config.CLIENT_URL],
+    origin(origin, callback) {
+      // Allow requests without an Origin header (e.g. server-to-server).
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
   }),
 );
-
 // Stripe verifies webhook signatures against the RAW body, so this path must
 // be mounted before express.json(). Change the path to match your webhook
 // route, and read req.body as a Buffer in that handler.
