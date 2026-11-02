@@ -57,6 +57,13 @@ console.log("CORS environment diagnostic:", {
 app.use(
   cors({
     origin(origin, callback) {
+      console.log("CORS origin check:", {
+        requestOrigin: origin ?? null,
+        allowedOrigins,
+        adminMatches: origin === config.ADMIN_URL,
+        clientMatches: origin === config.CLIENT_URL,
+      });
+
       if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
