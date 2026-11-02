@@ -29,6 +29,7 @@ const envSchema = z
     // URLs
     PUBLIC_API_URL: url("PUBLIC_API_URL"),
     CLIENT_URL: url("CLIENT_URL"),
+    ADMIN_URL: url("ADMIN_URL").optional(),
 
     // Database
     DB_HOST: z.string().min(1, "DB_HOST is required"),
@@ -36,6 +37,7 @@ const envSchema = z
     DB_USER: z.string().min(1, "DB_USER is required"),
     DB_PASSWORD: z.string().optional(),
     DB_NAME: z.string().min(1, "DB_NAME is required"),
+    DB_SSL: z.enum(["true", "false"]).default("false"),
 
     // Auth
     JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
@@ -87,9 +89,9 @@ const data = result.data;
 
 export const config = Object.freeze({
   ...data,
-  // Normalize to a bare origin: no path, no trailing slash.
   PUBLIC_API_URL: new URL(data.PUBLIC_API_URL).origin,
   CLIENT_URL: new URL(data.CLIENT_URL).origin,
+  ADMIN_URL: data.ADMIN_URL ? new URL(data.ADMIN_URL).origin : undefined,
   isProduction: data.NODE_ENV === "production",
   isDevelopment: data.NODE_ENV === "development",
   isTest: data.NODE_ENV === "test",
