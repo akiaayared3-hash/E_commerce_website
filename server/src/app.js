@@ -47,10 +47,11 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 
 const allowedOrigins = [config.CLIENT_URL, config.ADMIN_URL].filter(Boolean);
 
+console.log("CORS allowed origins:", allowedOrigins);
+
 app.use(
   cors({
     origin(origin, callback) {
-      // Allow requests without an Origin header (e.g. server-to-server).
       if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
