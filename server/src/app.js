@@ -47,7 +47,11 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 
 const allowedOrigins = [config.CLIENT_URL, config.ADMIN_URL].filter(Boolean);
 
-console.log("CORS allowed origins:", allowedOrigins);
+console.log("CORS environment diagnostic:", {
+  adminUrlLoaded: Boolean(config.ADMIN_URL),
+  clientUrlLoaded: Boolean(config.CLIENT_URL),
+  adminUrlMatches: config.ADMIN_URL === "https://dash-bored-seven.vercel.app",
+});
 
 app.use(
   cors({
