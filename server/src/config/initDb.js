@@ -80,7 +80,6 @@ export const initialDatabase = async () => {
         UNIQUE KEY uq_products_slug (slug),
         KEY idx_products_category (category_id),
         KEY idx_products_active_id (is_active, id),
-        FULLTEXT KEY ft_products_name (name),
         CONSTRAINT fk_products_category
           FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT,
         CONSTRAINT chk_products_best_price CHECK (best_price >= 0)

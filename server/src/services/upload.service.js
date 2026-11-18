@@ -1,130 +1,140 @@
-// utils/productImageStorage.util.js
-import { randomUUID } from "node:crypto";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { pool } from "../config/db.js";
+import * as uploadModel from "../models/upload.model.js";
+import {
+  saveProductImage,
+  deleteProductImage as deleteImageFile,
+  buildProductImageUrl,
+} from "../utils/productImageStorage.util.js";
+import { ApiError } from "../utils/apiError.util.js";
+
+const formatImages = (images) =>
+  images.map((image) => ({
+    ...image,
+    url: buildProductImageUrl(image.url),
+  }));
 
 /**
- * Disk layout:
- *   <project>/uploads/products/<uuid>.<ext>
- * Public URL:
- *   {PUBLIC_BASE_URL}/uploads/products/<uuid>.<ext>
- *   or relative /uploads/products/... if PUBLIC_BASE_URL is empty
+ * Upload product images and save their database records.
  */
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// Prefer project-root /uploads/products (same as express.static)
-const UPLOAD_DIR =
-  process.env.PRODUCT_UPLOAD_DIR ||
-  path.join(process.cwd(), "uploads", "products");
-
-const URL_PATH_PREFIX = "/uploads/products";
-
-const ALLOWED_MIME = new Map([
-  ["image/jpeg", "jpg"],
-  ["image/png", "png"],
-  ["image/webp", "webp"],
-]);
-
-const ensureDir = async () => {
-  await fs.mkdir(UPLOAD_DIR, { recursive: true });
-};
-
-/**
- * Turn stored value (absolute URL, path, or key) into a public URL for API responses.
- */
-export const buildProductImageUrl = (value) => {
-  if (value == null) return null;
-  const s = String(value).trim();
-  if (!s) return null;
-
-  // Already absolute
-  if (/^https?:\/\//i.test(s)) return s;
-
-  const base = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
-  const pathPart = s.startsWith("/") ? s : `/${s.replace(/^\/+/, "")}`;
-
-  return base ? `${base}${pathPart}` : pathPart;
-};
-
-/**
- * Resolve a stored url / key to an absolute filesystem path for deletion.
- */
-const toFilesystemPath = (value) => {
-  if (value == null) return null;
-  let s = String(value).trim();
-  if (!s) return null;
-
-  // Strip origin if absolute URL
-  try {
-    if (/^https?:\/\//i.test(s)) {
-      s = new URL(s).pathname;
-    }
-  } catch {
-    // keep s
+export const uploadProductImages = async (productId, files) => {
+  if (!Array.isArray(files) || files.length === 0) {
+    throw new ApiError(400, "Please select at least one image.");
   }
 
-  // "/uploads/products/foo.jpg" → "uploads/products/foo.jpg"
-  s = s.replace(/^\/+/, "");
-
-  // Only allow files under uploads/products
-  const normalized = path.normalize(s).replace(/^(\.\.(\/|\\|$))+/, "");
-  if (
-    !normalized.startsWith("uploads/products/") &&
-    !normalized.startsWith("uploads\\products\\")
-  ) {
-    // If value is only a filename
-    if (!normalized.includes("/") && !normalized.includes("\\")) {
-      return path.join(UPLOAD_DIR, normalized);
-    }
-    return null;
-  }
-
-  return path.join(process.cwd(), normalized);
-};
-
-/**
- * Save one multer memory file ({ buffer, mimetype, originalname }).
- * Returns { key, url } where url is what you store in product_images.url
- * and key is used for cleanup (same as relative path or filename).
- */
-export const saveProductImage = async (file) => {
-  if (!file?.buffer?.length) {
-    throw new Error("Empty image file");
-  }
-
-  const ext = ALLOWED_MIME.get(file.mimetype);
-  if (!ext) {
-    throw new Error("Only JPEG, PNG, and WebP images are allowed");
-  }
-
-  await ensureDir();
-
-  const filename = `${randomUUID()}.${ext}`;
-  const absPath = path.join(UPLOAD_DIR, filename);
-  await fs.writeFile(absPath, file.buffer);
-
-  const relativeUrl = `${URL_PATH_PREFIX}/${filename}`;
-  const publicUrl = buildProductImageUrl(relativeUrl);
-
-  return {
-    key: relativeUrl, // used by discardImages → deleteProductImage
-    url: publicUrl, // stored in DB (or store relativeUrl if you prefer)
-    filename,
-  };
-};
-
-/**
- * Delete by key, relative path, or full URL previously stored / returned.
- */
-export const deleteProductImage = async (value) => {
-  const abs = toFilesystemPath(value);
-  if (!abs) return;
+  const savedFiles = [];
+  let connection;
+  let transactionStarted = false;
+  let committed = false;
 
   try {
-    await fs.unlink(abs);
-  } catch (err) {
-    if (err?.code !== "ENOENT") throw err;
+    connection = await pool.getConnection();
+
+    await connection.beginTransaction();
+    transactionStarted = true;
+
+    const existingImages = await uploadModel.listByProduct(
+      productId,
+      connection,
+    );
+
+    const highestSortOrder = existingImages.reduce(
+      (highest, image) => Math.max(highest, Number(image.sort_order) || 0),
+      -1,
+    );
+
+    for (let index = 0; index < files.length; index++) {
+      const file = files[index];
+      const saved = await saveProductImage(file);
+
+      savedFiles.push(saved);
+
+      await uploadModel.saveView(
+        {
+          product_id: productId,
+          view_type:
+            existingImages.length === 0 && index === 0 ? "front" : "detail",
+          url: saved.key,
+          color: null,
+          alt: file.originalname || null,
+          is_primary: existingImages.length === 0 && index === 0,
+          sort_order: highestSortOrder + index + 1,
+        },
+        connection,
+      );
+    }
+
+    await connection.commit();
+    committed = true;
+    transactionStarted = false;
+  } catch (error) {
+    if (transactionStarted && connection) {
+      await connection.rollback().catch(() => {});
+    }
+
+    if (!committed) {
+      await Promise.allSettled(
+        savedFiles.map((file) => deleteImageFile(file.key)),
+      );
+    }
+
+    throw error;
+  } finally {
+    connection?.release();
   }
+
+  // Fetch after commit, outside the upload cleanup handler.
+  return getProductImages(productId);
+};
+
+/**
+ * Retrieve all images belonging to a product.
+ */
+export const getProductImages = async (productId) => {
+  const images = await uploadModel.listByProduct(productId);
+  return formatImages(images);
+};
+
+/**
+ * Set an image as the primary image.
+ */
+export const setPrimaryImage = async (productId, imageId) => {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const updated = await uploadModel.setPrimary(
+      imageId,
+      productId,
+      connection,
+    );
+
+    if (!updated) {
+      throw new ApiError(404, "Product image not found.");
+    }
+
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback().catch(() => {});
+    throw error;
+  } finally {
+    connection.release();
+  }
+
+  return getProductImages(productId);
+};
+
+/**
+ * Delete an image record and its physical file.
+ */
+export const deleteProductImage = async (productId, imageId) => {
+  const removed = await uploadModel.removeById(imageId, productId);
+
+  if (!removed) {
+    throw new ApiError(404, "Product image not found.");
+  }
+
+  await deleteImageFile(removed.url);
+
+  return true;
 };

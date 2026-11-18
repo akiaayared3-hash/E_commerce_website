@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { NavLink, useSearchParams } from "react-router-dom";
 import { buildIndex, searchProducts, didYouMean } from "./serchproducts.js";
-import "../component/ProductSearch/ProductSearch.css";
+import "../component/ProductSearch/Productsearch.css";
 
 const formatPrice = (p) => `ETB ${(p || 0).toLocaleString()}`;
 

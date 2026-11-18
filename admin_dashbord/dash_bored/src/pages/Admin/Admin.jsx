@@ -4,7 +4,7 @@ import { useAuth } from "../../context/AuthContext.jsx";
 import SideBar from "../../component/sideBar/SideBar.jsx";
 import NavBar from "../../component/NavBar/NavBar.jsx";
 import { apiRequest } from "../../lib/api.js";
-import "./admin.css";
+import "./Admin.css";
 
 const Admin = () => {
   const [open, setOpen] = useState(false);

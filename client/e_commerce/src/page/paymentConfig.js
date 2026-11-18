@@ -14,16 +14,14 @@ export const PAYMENT_METHODS = [
   },
 ];
 
-// Base URL of YOUR server (the one that holds the Chapa secret key)
-export const API_BASE =
-  import.meta.env?.VITE_API_URL || "http://localhost:3000";
+// Same backend URL used by the customer API client.
+export const API_BASE = (
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:3000"
+).replace(/\/+$/, "");
 
-// ---- Keep your ORIGINAL values for these two (they were in your old file) ----
-// Where new orders are sent. Leave "" to only save them in the browser.
+// Keep existing checkout behavior unchanged.
 export const ORDER_ENDPOINT = "";
 
-// Shop details used in order messages / success page
 export const SHOP = {
   name: "Your Shop Name",
-  // add the other fields you had before (whatsapp number, phone, etc.)
 };

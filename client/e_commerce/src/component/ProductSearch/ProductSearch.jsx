@@ -6,7 +6,7 @@ import {
   didYouMean,
   highlightParts,
 } from "../../page/serchproducts.js";
-import "./ProductSearch.css";
+import "./Productsearch.css";
 
 const RECENT_KEY = "recent_searches_v1";
 const formatPrice = (p) => `ETB ${(p || 0).toLocaleString()}`;
